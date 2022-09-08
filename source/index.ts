@@ -1,15 +1,15 @@
 export interface IStore {
     Id: string;
+    OptimalBufferSize: number | undefined
     append(data: string): void;
     read(position: number, utf8CharactersToRead: number): string;
     fetchCurrentSize(): number;
 }
 
-export interface IKey {
-    key: string,
-}
+export interface IKey extends String { }
 
-export interface IIndex extends IKey {
+export interface IIndexEntry {
+    key: IKey;
     position: number;
     length: number;
 }
@@ -34,8 +34,8 @@ interface versionOneInfo extends IVersionInfo {
     headerData1FieldIndex: number,
     headerData2FieldIndex: number,
     headerBlockIdFieldIndex: number,
-    headerIndexLengthFieldIndex: number,
-    headerDataLengthFieldIndex: number,
+    headerIndexOffsetFieldIndex: number,
+    headerDataOffsetFieldIndex: number,
     headerPartialLengthFieldIndex: number,
     headerHash1FieldIndex: number,
     headerHash2FieldIndex: number,
@@ -63,12 +63,13 @@ export class SortedVersions {
         headerData1FieldIndex: 6,
         headerData2FieldIndex: 8,
         headerBlockIdFieldIndex: 1,
-        headerIndexLengthFieldIndex: 3,
-        headerDataLengthFieldIndex: 4,
-        headerPartialLengthFieldIndex: 11,
-        headerHash1FieldIndex: 10,
-        headerHash2FieldIndex: 12,
-        bufferSize: 4096
+        headerIndexOffsetFieldIndex: 3,
+        headerDataOffsetFieldIndex: 4,
+        headerPartialLengthFieldIndex: 10,
+        headerHash1FieldIndex: 9,
+        headerHash2FieldIndex: 11,
+        bufferSize: 4096,
+        number: 1
     } as versionOneInfo]]);
 
     public get(version: number): IVersionInfo {
@@ -82,29 +83,27 @@ export class SortedVersions {
 
 export class SortedBlocks {
     private versionRegistry = new SortedVersions();
+    public readonly version: IVersionInfo;
 
     constructor(
         private store: IStore,
         private sortResolver: (lhs: string[], rhs: string[]) => number,
         private hashResolver: (serializedData: string) => string,
         private indexResolver: (record: string[]) => IKey,
-        public readonly currentVersion: number = 1
-    ) { }
+        currentVersion: number = 1
+    ) { this.version = this.versionRegistry.get(currentVersion); }
 
     public append(blockId: string, records: string[][]): number {
-        const versionInfo = this.versionRegistry.get(this.currentVersion);
         let sortedRecords = records.sort(this.sortResolver);
-        const Index = new Map<string, IIndex>();
-        const context = SortedIndex.serializeIndexBlock(sortedRecords, this.indexResolver, versionInfo);
-        const serializedHeaderBlock = SortedHeader.serializeHeaderBlock(blockId, context, versionInfo, this.hashResolver);
+        const context = SortedIndex.serializeIndexBlock(sortedRecords, this.indexResolver, this.version);
+        const serializedHeaderBlock = SortedHeader.serializeHeaderBlock(blockId, context, this.version, this.hashResolver);
         const serializedBlock = `${context.serializedDataBlock}${context.serializedIndexBlock}${serializedHeaderBlock}`;
         this.store.append(serializedBlock);
         return serializedBlock.length
     }
 
     public search(): SortedHeader | undefined {
-        const versionInfo = this.versionRegistry.get(this.currentVersion);
-        return SortedHeader.from(this.store, versionInfo, this.hashResolver);
+        return SortedHeader.from(this.store, this.version, this.hashResolver);
     }
 }
 
@@ -114,31 +113,25 @@ export class SortedIndex {
         switch (header.version.number) {
             case 1:
                 const currentVersion = header.version as versionOneInfo;
-                const finalIndex = new Map<string, IIndex>();
                 if (header.IndexHash != undefined && header.hashResolver != undefined) {
                     const computedHash = header.hashResolver(serializedIndex);
                     if (computedHash != header.IndexHash) {
                         throw new Error(`Hash for index(${header.IndexHash}) doesnt match the computed(${computedHash}) one.`)
                     }
                 }
-                const skippedEntries = [];
-                const index = serializedIndex.split(currentVersion.recordSeperatorChar);
-                index.pop();//An Extra end line
-                for (let pointer = 0; pointer < index.length; pointer++) {
-                    const entry = index[pointer];
-                    const values = entry.split(currentVersion.fieldSeperatorChar);
-                    if (values.length === currentVersion.fieldsInIndex && values[0] === currentVersion.indexRecordType) {
-                        const key = values[1];
-                        const relativePosition = parseInt(values[2]);
-                        const length = parseInt(values[3]);
-                        const absolutePosition = dataBlockStartPosition + relativePosition;
-                        finalIndex.set(key, { "position": absolutePosition, "length": length, "key": key });
-                    }
-                    else {
-                        skippedEntries.push(`Skipped Index item(${entry}) at position(${pointer}) as it is invalid.`)
-                    }
-                }
-                return new SortedIndex(finalIndex, skippedEntries, currentVersion, header.store, finalIndex.size);
+                const finalIndex = serializedIndex.split(currentVersion.recordSeperatorChar)
+                    .reduce((acc, entry, idx) => {
+                        const values = entry.split(currentVersion.fieldSeperatorChar);
+                        if (values.length === currentVersion.fieldsInIndex && values[0] === currentVersion.indexRecordType) {
+                            const key = values[1];
+                            const relativePosition = parseInt(values[2]);
+                            const length = parseInt(values[3]);
+                            const absolutePosition = dataBlockStartPosition + relativePosition;
+                            acc.set(key, { "position": absolutePosition, "length": length, "key": key });
+                        }
+                        return acc;
+                    }, new Map<IKey, IIndexEntry>())
+                return new SortedIndex(finalIndex, currentVersion, header.store);
                 break;
             default:
                 throw new Error(`Version ${header.version.number} is not supported for deserializing index.`);
@@ -146,36 +139,26 @@ export class SortedIndex {
         }
     }
 
-    private constructor(private map: Map<string, IIndex>, public readonly skippedEntries: string[], public readonly version: IVersionInfo, private store: IStore, public readonly entriesCount: number) { }
+    private constructor(public entries: Map<IKey, IIndexEntry>, public readonly version: IVersionInfo, private store: IStore) { }
 
-    public get(key: IKey): IIndex | undefined {
-        return this.map.get(key.key);
-    }
-
-    public records(key: IKey): string[][] {
-        const indexRecord = this.get(key);
-        if (indexRecord == undefined) {
-            return [];
-        }
-        else {
-            switch (this.version.number) {
-                case 1:
-                    const currentVersion = this.version as versionOneInfo;
-                    const serializedData = this.store.read(indexRecord.position, indexRecord.length);
-                    return serializedData.split(currentVersion.recordSeperatorChar)
-                        .reduce((acc, data) => {
-                            const fields = data.split(currentVersion.fieldSeperatorChar);
-                            if (fields.length > currentVersion.minFieldsInRecord && fields[0] === currentVersion.dataRecordType) {
-                                fields.shift();
-                                acc.push(fields);
-                            }
-                            return acc;
-                        }, new Array<string[]>());
-                    break;
-                default:
-                    throw new Error(`Version ${this.version.number} is not supported for deserializing records.`);
-                    break;
-            }
+    public fetchAssociatedRecords(indexedEntry: IIndexEntry): string[][] | undefined {
+        switch (this.version.number) {
+            case 1:
+                const currentVersion = this.version as versionOneInfo;
+                const serializedData = this.store.read(indexedEntry.position, indexedEntry.length);
+                return serializedData.split(currentVersion.recordSeperatorChar)
+                    .reduce((acc, data) => {
+                        const fields = data.split(currentVersion.fieldSeperatorChar);
+                        if (fields.length > currentVersion.minFieldsInRecord && fields[0] === currentVersion.dataRecordType) {
+                            fields.shift();
+                            acc.push(fields);
+                        }
+                        return acc;
+                    }, new Array<string[]>());
+                break;
+            default:
+                throw new Error(`Version ${this.version.number} is not supported for deserializing records.`);
+                break;
         }
     }
 
@@ -183,7 +166,7 @@ export class SortedIndex {
         switch (version.number) {
             case 1:
                 const currentVersion = version as versionOneInfo;
-                return currentVersion.dataRecordType + record.join(currentVersion.fieldSeperatorChar) + currentVersion.recordSeperatorChar;
+                return currentVersion.dataRecordType + currentVersion.fieldSeperatorChar + record.join(currentVersion.fieldSeperatorChar) + currentVersion.recordSeperatorChar;
                 break;
             default:
                 throw new Error(`Version ${version.number} is not supported for serializing index.`);
@@ -191,7 +174,7 @@ export class SortedIndex {
         }
     }
 
-    private static serializeDataBlock(sortedRecords: string[][], indexMapping: Map<string, IIndex>, indexResolver: (record: string[]) => IKey, version: IVersionInfo): string {
+    private static serializeDataBlock(sortedRecords: string[][], indexMapping: Map<IKey, IIndexEntry>, indexResolver: (record: string[]) => IKey, version: IVersionInfo): string {
         switch (version.number) {
             case 1:
                 const currentVersion = version as versionOneInfo;
@@ -200,7 +183,7 @@ export class SortedIndex {
                     const record = sortedRecords[recordIdx];
                     const indexKey = indexResolver(record);
                     const serializedRecord = SortedIndex.serializeRecord(record, currentVersion);
-                    const indexEntry = { "key": indexKey.key, "position": serializedDataBlock.length, "length": serializedRecord.length }
+                    const indexEntry = { "key": indexKey, "position": serializedDataBlock.length, "length": serializedRecord.length }
                     const existingIndexEntry = indexMapping.get(indexEntry.key);
                     if (existingIndexEntry != undefined) {
                         indexEntry.length += existingIndexEntry.length;
@@ -221,7 +204,7 @@ export class SortedIndex {
         switch (version.number) {
             case 1:
                 const currentVersion = version as versionOneInfo;
-                const indexMapping = new Map<string, IIndex>();
+                const indexMapping = new Map<IKey, IIndexEntry>();
                 const serializedDataBlock = SortedIndex.serializeDataBlock(sortedRecords, indexMapping, indexResolver, currentVersion);
                 return {
                     "serializedDataBlock": serializedDataBlock,
@@ -233,7 +216,7 @@ export class SortedIndex {
                                 + currentVersion.fieldSeperatorChar
                                 + indexRecord.position.toString()
                                 + currentVersion.fieldSeperatorChar
-                                + (indexRecord.length - 1).toString()
+                                + indexRecord.length.toString()
                                 + currentVersion.recordSeperatorChar;
                         })
                         .join("")
@@ -247,22 +230,24 @@ export class SortedIndex {
 }
 
 export class SortedHeader {
-    public readonly BlockId: number
+    public readonly BlockId: string
     public readonly IndexHash: string
     public readonly DataHash: string
     public readonly HeaderHash: string
-    public readonly IndexLength: number
-    public readonly DataLength: number
+    public readonly IndexOffset: number
+    public readonly DataOffset: number
 
     public static from(store: IStore, version: IVersionInfo, hashResolver: ((serializedData: string) => string) | undefined, start: number = store.fetchCurrentSize()): SortedHeader | undefined {
         switch (version.number) {
             case 1:
                 const currentVersion = version as versionOneInfo;
                 const magicStartSequence = `${currentVersion.headerRecordType}${currentVersion.fieldSeperatorChar}`;
-                let fileCursor = start - currentVersion.bufferSize;
+                const bufferSize = Math.min((store.OptimalBufferSize == undefined ? currentVersion.bufferSize : store.OptimalBufferSize), start);
+                let fileCursor = start - bufferSize;
                 do {
-                    const currentRead = store.read(Math.max(fileCursor, 0), currentVersion.bufferSize)
-                    fileCursor = (fileCursor + currentVersion.bufferSize) - currentRead.length;
+                    const currentRead = store.read(Math.max(fileCursor, 0), bufferSize)
+                    fileCursor = (fileCursor + bufferSize) - currentRead.length;
+                    if (fileCursor < 0) return undefined; //This occurs when we read EOF(End of file)
                     let baseReadLength = currentRead.length;
                     const headerItems = currentRead.split(currentVersion.recordSeperatorChar);
                     if (fileCursor > 0) {
@@ -278,19 +263,20 @@ export class SortedHeader {
                             if (acc.found === false) {
                                 acc.found = rawHeader.startsWith(magicStartSequence)
                                     && rawHeader.split(currentVersion.fieldSeperatorChar).length === currentVersion.fieldsInHeader
-                                    && currentVersion.number !== parseInt(rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerVersionFieldIndex], 10)
-                                    && rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerIndex1FieldIndex] !== rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerIndex2FieldIndex]
-                                    && rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerData1FieldIndex] !== rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerData2FieldIndex]
-                                    && rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerHash1FieldIndex] !== rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerHash2FieldIndex]
-                                    && hashResolver != undefined ?
-                                    rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerHash1FieldIndex] !== hashResolver(rawHeader.substring(0, parseInt(rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerPartialLengthFieldIndex], 10)))
-                                    : true;
+                                    && currentVersion.number === parseInt(rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerVersionFieldIndex], 10)
+                                    && rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerIndex1FieldIndex] === rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerIndex2FieldIndex]
+                                    && rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerData1FieldIndex] === rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerData2FieldIndex]
+                                    && rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerHash1FieldIndex] === rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerHash2FieldIndex]
+                                    && (hashResolver != undefined ?
+                                        rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerHash1FieldIndex] === hashResolver(rawHeader.substring(0, parseInt(rawHeader.split(currentVersion.fieldSeperatorChar)[currentVersion.headerPartialLengthFieldIndex], 10)))
+                                        : true);
                                 acc.absolutePosition -= (rawHeader.length + 1);
 
                                 if (acc.found === true) {
                                     acc.rawValues = rawHeader.split(currentVersion.fieldSeperatorChar);
                                     arr.splice(1);//Equvalent to break;
                                     acc.length = rawHeader.length;
+                                    acc.absolutePosition++;
                                 }
                             }
                             return acc;
@@ -300,7 +286,7 @@ export class SortedHeader {
                         return new SortedHeader(headerPointer.absolutePosition, headerPointer.length, currentVersion, store, headerPointer.rawValues, hashResolver);
                     }
                     else {
-                        fileCursor -= currentVersion.bufferSize;
+                        fileCursor -= bufferSize;
                     }
                 }
                 while (fileCursor > 0)
@@ -315,9 +301,9 @@ export class SortedHeader {
         switch (version.number) {
             case 1:
                 const currentVersion = version as versionOneInfo;
-                this.BlockId = parseInt(rawValues[currentVersion.headerBlockIdFieldIndex], 10);
-                this.IndexLength = parseInt(rawValues[currentVersion.headerIndexLengthFieldIndex], 10);
-                this.DataLength = parseInt(rawValues[currentVersion.headerDataLengthFieldIndex], 10);
+                this.BlockId = rawValues[currentVersion.headerBlockIdFieldIndex];
+                this.IndexOffset = parseInt(rawValues[currentVersion.headerIndexOffsetFieldIndex], 10);
+                this.DataOffset = parseInt(rawValues[currentVersion.headerDataOffsetFieldIndex], 10);
                 this.IndexHash = rawValues[currentVersion.headerIndex1FieldIndex];
                 this.DataHash = rawValues[currentVersion.headerData1FieldIndex];
                 this.HeaderHash = rawValues[currentVersion.headerHash1FieldIndex];
@@ -329,14 +315,14 @@ export class SortedHeader {
     }
 
     public next(): SortedHeader | undefined {
-        const dataStartPosition = this.absolutePosition - (this.IndexLength + this.DataLength);
+        const dataStartPosition = this.absolutePosition - (this.IndexOffset + this.DataOffset);
         return SortedHeader.from(this.store, this.version, this.hashResolver, dataStartPosition);
     }
 
     public index(): SortedIndex {
-        const indexStartPosition = this.absolutePosition;
-        const dataStartPosition = this.absolutePosition - (this.IndexLength + this.DataLength);
-        const serializedIndex = this.store.read(indexStartPosition, this.IndexLength);
+        const indexStartPosition = this.absolutePosition - this.IndexOffset;
+        const dataStartPosition = this.absolutePosition - (this.IndexOffset + this.DataOffset);
+        const serializedIndex = this.store.read(indexStartPosition, this.IndexOffset);
         return SortedIndex.from(serializedIndex, this, dataStartPosition);
     }
 
