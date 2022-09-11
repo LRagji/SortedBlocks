@@ -86,7 +86,7 @@ export class SortedBlocks {
     public readonly version: IVersionInfo;
 
     constructor(
-        private store: IStore,
+        public readonly store: IStore,
         private sortResolver: (lhs: string[], rhs: string[]) => number,
         private hashResolver: (serializedData: string) => string,
         private indexResolver: (record: string[]) => IKey,
