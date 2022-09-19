@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import crypto from "crypto";
-import { IKey, SortedBlocks, SortedHeader, SortedVersions } from '../../source/index';
+import { IIndexEntry, IKey, SortedBlocks, SortedHeader, SortedVersions } from '../../source/index';
 import { MockedStore } from '../utilities/mock-store';
 const delay = (timeInMillis: number) => new Promise((acc, rej) => setTimeout(acc, timeInMillis));
 
@@ -35,9 +35,10 @@ describe(`sorted-blocks read specs v1`, () => {
         const index = header?.index();
         assert.notEqual(index, undefined);
         assert.deepStrictEqual(index.version.number, version);
-        assert.deepStrictEqual(index.entries.size, records.length);
+        const entries = new Map<IKey, IIndexEntry>(index.iterate());
+        assert.deepStrictEqual(entries.size, records.length);
 
-        const IndexedRecord = index?.entries.get(records[0][0]);
+        const IndexedRecord = entries.get(records[0][0]);
         assert.notEqual(IndexedRecord, undefined);
         if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), records)
 
@@ -63,13 +64,14 @@ describe(`sorted-blocks read specs v1`, () => {
         const index = header?.index();
         assert.notEqual(index, undefined);
         assert.deepStrictEqual(index.version.number, version);
-        assert.deepStrictEqual(index.entries.size, 2);
+        const entries = new Map<IKey, IIndexEntry>(index.iterate());
+        assert.deepStrictEqual(entries.size, 2);
 
-        let IndexedRecord = index?.entries.get("Hello");
+        let IndexedRecord = entries.get("Hello");
         assert.notEqual(IndexedRecord, undefined);
         if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), [["Hello", "1"], ["Hello", "2"], ["Hello", "3"]]);
 
-        IndexedRecord = index?.entries.get("H3llo");
+        IndexedRecord = entries.get("H3llo");
         assert.notEqual(IndexedRecord, undefined);
         if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), [["H3llo", "World"]])
     })
@@ -105,9 +107,10 @@ describe(`sorted-blocks read specs v1`, () => {
         const index = header2?.index();
         assert.notEqual(index, undefined);
         assert.deepStrictEqual(index.version.number, version);
-        assert.deepStrictEqual(index.entries.size, records.length);
+        const entries = new Map<IKey, IIndexEntry>(index.iterate());
+        assert.deepStrictEqual(entries.size, records.length);
 
-        const IndexedRecord = index?.entries.get(records[0][0]);
+        const IndexedRecord = entries.get(records[0][0]);
         assert.notEqual(IndexedRecord, undefined);
         if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), records)
 
@@ -119,10 +122,11 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const index1 = header1?.index();
         assert.notEqual(index1, undefined);
+        const entries1 = new Map<IKey, IIndexEntry>(index1.iterate());
         assert.deepStrictEqual(index1?.version.number, version);
-        assert.deepStrictEqual(index1?.entries.size, records.length);
+        assert.deepStrictEqual(entries1.size, records.length);
 
-        const IndexedRecord1 = index?.entries.get(records[0][0]);
+        const IndexedRecord1 = entries1.get(records[0][0]);
         assert.notEqual(IndexedRecord1, undefined);
         if (IndexedRecord1 != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord1), records)
     })
@@ -150,9 +154,10 @@ describe(`sorted-blocks read specs v1`, () => {
         const index = header2?.index();
         assert.notEqual(index, undefined);
         assert.deepStrictEqual(index.version.number, version);
-        assert.deepStrictEqual(index.entries.size, records.length);
+        const entries = new Map<IKey, IIndexEntry>(index.iterate());
+        assert.deepStrictEqual(entries.size, records.length);
 
-        const IndexedRecord = index?.entries.get(records[0][0]);
+        const IndexedRecord = entries.get(records[0][0]);
         assert.notEqual(IndexedRecord, undefined);
         if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), records)
 
@@ -164,10 +169,11 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const index1 = header1?.index();
         assert.notEqual(index1, undefined);
+        const entries1 = new Map<IKey, IIndexEntry>(index1.iterate());
         assert.deepStrictEqual(index1?.version.number, version);
-        assert.deepStrictEqual(index1?.entries.size, records.length);
+        assert.deepStrictEqual(entries1.size, records.length);
 
-        const IndexedRecord1 = index?.entries.get(records[0][0]);
+        const IndexedRecord1 = entries1.get(records[0][0]);
         assert.notEqual(IndexedRecord1, undefined);
         if (IndexedRecord1 != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord1), records)
     })

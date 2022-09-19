@@ -140,19 +140,7 @@ export class SortedIndex {
                         throw new Error(`Hash for index(${header.IndexHash}) doesnt match the computed(${computedHash}) one.`)
                     }
                 }
-                const finalIndex = serializedIndex.split(currentVersion.recordSeperatorChar)
-                    .reduce((acc, entry, idx) => {
-                        const values = entry.split(currentVersion.fieldSeperatorChar);
-                        if (values.length === currentVersion.fieldsInIndex && values[0] === currentVersion.indexRecordType) {
-                            const key = values[1];
-                            const relativePosition = parseInt(values[2]);
-                            const length = parseInt(values[3]);
-                            const absolutePosition = dataBlockStartPosition + relativePosition;
-                            acc.set(key, { "position": absolutePosition, "length": length, "key": key });
-                        }
-                        return acc;
-                    }, new Map<IKey, IIndexEntry>())
-                return new SortedIndex(finalIndex, currentVersion, header.store);
+                return new SortedIndex(serializedIndex, currentVersion, dataBlockStartPosition);
                 break;
             default:
                 throw new Error(`Version ${header.version.number} is not supported for deserializing index.`);
@@ -160,7 +148,48 @@ export class SortedIndex {
         }
     }
 
-    private constructor(public entries: Map<IKey, IIndexEntry>, public readonly version: IVersionInfo, private store: IStore) { }
+    private constructor(private serializedIndex: string, public readonly version: IVersionInfo, private readonly dataBlockStartPosition: number) { }
+
+    public get(key: IKey): IIndexEntry | undefined {
+        const entry = this.readEntry(key);
+        if (entry != undefined && key.toString() !== entry.value.key.toString()) {
+            return undefined;
+        }
+        return entry?.value;
+    }
+
+    public *iterate(): Generator<[IKey, IIndexEntry]> {
+        let entry = this.readEntry(undefined);
+        while (entry !== undefined) {
+            yield [entry.value.key, entry.value];
+            entry = this.readEntry(undefined, entry.endPosition);
+        }
+    }
+
+    private readEntry(key: IKey | undefined, startPosition: number = 0): { value: IIndexEntry, endPosition: number } | undefined {
+        switch (this.version.number) {
+            case 1:
+                const currentVersion = this.version as versionOneInfo;
+                const creteria = key == undefined ? "" : `${key}${currentVersion.fieldSeperatorChar}`;
+                const searchPattern = `${currentVersion.indexRecordType}${currentVersion.fieldSeperatorChar}${creteria}`;
+                const index = this.serializedIndex.indexOf(searchPattern, startPosition);
+                if (index === -1) {
+                    return undefined;
+                }
+                const start = index + 1;
+                let end = this.serializedIndex.indexOf(currentVersion.recordSeperatorChar, start);
+                end === -1 ? (this.serializedIndex.length - 1) : end;
+                const indexEntry = this.serializedIndex.substring(start, end);
+                const values = indexEntry.split(currentVersion.fieldSeperatorChar);
+                const relativePosition = parseInt(values[2]);
+                const length = parseInt(values[3]);
+                const absolutePosition = this.dataBlockStartPosition + relativePosition;
+                return { value: { "position": absolutePosition, "length": length, "key": values[1] }, endPosition: end };
+            default:
+                throw new Error(`Version ${this.version.number} is not supported for serializing index.`);
+                break;
+        }
+    }
 
     private static serializeRecord(record: string[], version: IVersionInfo) {
         switch (version.number) {
