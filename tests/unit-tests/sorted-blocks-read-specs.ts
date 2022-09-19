@@ -39,7 +39,7 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const IndexedRecord = index?.entries.get(records[0][0]);
         assert.notEqual(IndexedRecord, undefined);
-        if (IndexedRecord != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord), records)
+        if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), records)
 
     })
 
@@ -67,11 +67,11 @@ describe(`sorted-blocks read specs v1`, () => {
 
         let IndexedRecord = index?.entries.get("Hello");
         assert.notEqual(IndexedRecord, undefined);
-        if (IndexedRecord != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord), [["Hello", "1"], ["Hello", "2"], ["Hello", "3"]]);
+        if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), [["Hello", "1"], ["Hello", "2"], ["Hello", "3"]]);
 
         IndexedRecord = index?.entries.get("H3llo");
         assert.notEqual(IndexedRecord, undefined);
-        if (IndexedRecord != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord), [["H3llo", "World"]])
+        if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), [["H3llo", "World"]])
     })
 
     it('should default to version 1', async () => {
@@ -109,7 +109,7 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const IndexedRecord = index?.entries.get(records[0][0]);
         assert.notEqual(IndexedRecord, undefined);
-        if (IndexedRecord != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord), records)
+        if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), records)
 
         const header1 = header2?.next();
         assert.notEqual(header1, undefined);
@@ -124,7 +124,7 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const IndexedRecord1 = index?.entries.get(records[0][0]);
         assert.notEqual(IndexedRecord1, undefined);
-        if (IndexedRecord1 != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord1), records)
+        if (IndexedRecord1 != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord1), records)
     })
 
     it('should be able to read multiple sortedblocks with smaller buffer size but greater than one header segment length ', async () => {
@@ -154,7 +154,7 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const IndexedRecord = index?.entries.get(records[0][0]);
         assert.notEqual(IndexedRecord, undefined);
-        if (IndexedRecord != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord), records)
+        if (IndexedRecord != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord), records)
 
         const header1 = header2?.next();
         assert.notEqual(header1, undefined);
@@ -169,6 +169,6 @@ describe(`sorted-blocks read specs v1`, () => {
 
         const IndexedRecord1 = index?.entries.get(records[0][0]);
         assert.notEqual(IndexedRecord1, undefined);
-        if (IndexedRecord1 != undefined) assert.deepStrictEqual(index?.fetchAssociatedRecords(IndexedRecord1), records)
+        if (IndexedRecord1 != undefined) assert.deepStrictEqual(target.fetchAssociatedRecords(IndexedRecord1), records)
     })
 });

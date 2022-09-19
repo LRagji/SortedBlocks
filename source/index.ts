@@ -105,6 +105,27 @@ export class SortedBlocks {
     public search(): SortedHeader | undefined {
         return SortedHeader.from(this.store, this.version, this.hashResolver);
     }
+
+    public fetchAssociatedRecords(indexedEntry: IIndexEntry): string[][] | undefined {
+        switch (this.version.number) {
+            case 1:
+                const currentVersion = this.version as versionOneInfo;
+                const serializedData = this.store.read(indexedEntry.position, indexedEntry.length);
+                return serializedData.split(currentVersion.recordSeperatorChar)
+                    .reduce((acc, data) => {
+                        const fields = data.split(currentVersion.fieldSeperatorChar);
+                        if (fields.length > currentVersion.minFieldsInRecord && fields[0] === currentVersion.dataRecordType) {
+                            fields.shift();
+                            acc.push(fields);
+                        }
+                        return acc;
+                    }, new Array<string[]>());
+                break;
+            default:
+                throw new Error(`Version ${this.version.number} is not supported for deserializing records.`);
+                break;
+        }
+    }
 }
 
 export class SortedIndex {
@@ -140,27 +161,6 @@ export class SortedIndex {
     }
 
     private constructor(public entries: Map<IKey, IIndexEntry>, public readonly version: IVersionInfo, private store: IStore) { }
-
-    public fetchAssociatedRecords(indexedEntry: IIndexEntry): string[][] | undefined {
-        switch (this.version.number) {
-            case 1:
-                const currentVersion = this.version as versionOneInfo;
-                const serializedData = this.store.read(indexedEntry.position, indexedEntry.length);
-                return serializedData.split(currentVersion.recordSeperatorChar)
-                    .reduce((acc, data) => {
-                        const fields = data.split(currentVersion.fieldSeperatorChar);
-                        if (fields.length > currentVersion.minFieldsInRecord && fields[0] === currentVersion.dataRecordType) {
-                            fields.shift();
-                            acc.push(fields);
-                        }
-                        return acc;
-                    }, new Array<string[]>());
-                break;
-            default:
-                throw new Error(`Version ${this.version.number} is not supported for deserializing records.`);
-                break;
-        }
-    }
 
     private static serializeRecord(record: string[], version: IVersionInfo) {
         switch (version.number) {
