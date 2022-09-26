@@ -19,7 +19,8 @@ describe(`sorted-section read specs`, () => {
         const target = new SortedSection(1, content.length);
         const key = BigInt(1), value = Buffer.from(content);
         target.add(key, value);
-        const result = target.toBuffer();
+        const iResult = target.toBuffer();
+        const result = Buffer.concat([iResult.index, iResult.values]);
         const expectedByteLength = 8 + 4 + value.length;
         const offset = 0;
         assert.deepStrictEqual(expectedByteLength, result.length);
@@ -44,7 +45,8 @@ describe(`sorted-section read specs`, () => {
         for (let index = 0; index < numberOfValues; index++) {
             target.add(BigInt(index), value);
         }
-        const result = target.toBuffer();
+        const iResult = target.toBuffer();
+        const result = Buffer.concat([iResult.index, iResult.values]);
         const expectedByteLength = (8 + 4 + value.length) * numberOfValues;
         let offset = 0;
         const valueBaseOffset = numberOfValues * (8 + 4);
