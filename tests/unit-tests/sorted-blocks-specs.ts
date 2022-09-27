@@ -4,7 +4,11 @@ import { Version1SortedBlocks } from '../../source/sorted-blocks';
 import { MockedAppendStore } from '../utilities/mock-store';
 
 const hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-
+const SOP = hashResolver(Buffer.from(`16111987`));;
+const EOP = hashResolver(Buffer.from(`01011991`));
+const version = Buffer.alloc(4);
+const bucketFactor = 1024;
+version.writeUInt32BE(1);
 
 describe(`sorted-section write specs`, () => {
 
@@ -22,8 +26,60 @@ describe(`sorted-section write specs`, () => {
         const blockId = "1526919030474-55";
         const target = new Version1SortedBlocks(mockStore);
         const key = BigInt(1), value = Buffer.from(content), blockIdBuff = Buffer.from(blockId);
+
         const bytesReturned = target.put(blockIdBuff, new BigInt64Array([key]), [value], value.length);
+
         assert.deepStrictEqual(bytesReturned, mockStore.store.length);
+        let start = SOP.length * -1, end = 0;//SOP
+        assert.deepStrictEqual(mockStore.store.subarray(start), SOP);
+        end = start; start -= version.length;//Version
+        assert.deepStrictEqual(mockStore.store.subarray(start, end), version);
+        end = start; start -= 4;//Header Length 1
+        const headerLength1 = mockStore.store.subarray(start, end).readUInt32BE(0);
+        assert.deepStrictEqual(headerLength1 > 0 && headerLength1 < bytesReturned, true);
+        end = start; start -= 16;//Header Hash 1
+        const headerHash1 = mockStore.store.subarray(start, end);
+        end = start; start -= 4;//Header Length 2
+        const headerLength2 = mockStore.store.subarray(start, end).readUInt32BE(0);
+        assert.deepStrictEqual(headerLength2 > 0 && headerLength2 < bytesReturned, true);
+        assert.deepStrictEqual(headerLength1, headerLength2);
+        end = start; start -= 16;//Header Hash 2
+        const headerHash2 = mockStore.store.subarray(start, end);
+        assert.deepStrictEqual(headerHash1, headerHash2);
+        const hashedHeader = mockStore.store.subarray(start - headerLength1, start);//Hashed Header
+        assert.deepStrictEqual(headerHash1, hashResolver(hashedHeader));
+        end = start; start -= 4; //Index Length
+        const indexLength = mockStore.store.subarray(start, end).readUint32BE(0);
+        end = start; start -= 4; //Data Length
+        const dataLength = mockStore.store.subarray(start, end).readUint32BE(0);
+        end = start; start -= 4; //BlockId Length
+        const blockIdLength = mockStore.store.subarray(start, end).readUint32BE(0);
+        end = start; start -= blockIdLength; //BlockId
+        const aBlockId = mockStore.store.subarray(start, end).toString();
+        assert.deepStrictEqual(aBlockId, blockId);
+        end = start; start -= 16; //Index Hash
+        const IndexHash = mockStore.store.subarray(start, end);
+        end = start; start -= 16; //Data Length
+        const dataHash = mockStore.store.subarray(start, end);
+        end = start; start -= 4; //Bucket Factor
+        const abucketFactor = mockStore.store.subarray(start, end).readUint32BE(0);
+        assert.deepEqual(abucketFactor, bucketFactor);
+        end = start; start -= 8; //Max ID
+        const maxId = mockStore.store.subarray(start, end).readBigInt64BE(0);
+        assert.deepEqual(maxId, key);
+        end = start; start -= 8; //Min ID
+        const minId = mockStore.store.subarray(start, end).readBigInt64BE(0);
+        assert.deepEqual(minId, key);
+        end = start; start -= 16; //EOP
+        const aEOP = mockStore.store.subarray(start, end);
+        assert.deepEqual(aEOP, EOP);
+        const aIndex = mockStore.store.subarray(start - indexLength, start);//Hashed Index
+        assert.deepStrictEqual(IndexHash, hashResolver(aIndex));
+        const aData = mockStore.store.subarray((start - indexLength) - dataLength, (start - indexLength));//Hashed Data
+        assert.deepStrictEqual(dataHash, hashResolver(aData));
+        //Section Index
+
+
     })
 
     // it('should throw if key is already presented', async () => {
@@ -34,27 +90,44 @@ describe(`sorted-section write specs`, () => {
     //     assert.throws(() => target.add(key, value), new Error(`Cannot add duplicate key ${key}, it already exists.`))
     // })
 
-    // it('should be doing correct indexing with multiple values', async () => {
-    //     const numberOfValues = 1000000;
-    //     const content = "Hello World String";
-    //     const target = new SortedSection(numberOfValues, content.length);
-    //     const value = Buffer.from(content);
-    //     for (let index = 0; index < numberOfValues; index++) {
-    //         target.add(BigInt(index), value);
-    //     }
-    //     const iResult = target.toBuffer();
-    //     const result = Buffer.concat([iResult.index, iResult.values]);
-    //     const expectedByteLength = (8 + 4 + value.length) * numberOfValues;
-    //     let offset = 0;
-    //     const valueBaseOffset = numberOfValues * (8 + 4);
-    //     assert.deepStrictEqual(expectedByteLength, result.length);
-    //     for (let index = 0; index < numberOfValues; index++) {
-    //         const keyBaseOffset = index * (8 + 4);
-    //         const key = BigInt(index);
-    //         assert.deepStrictEqual(key, result.readBigInt64BE(keyBaseOffset));
-    //         assert.deepStrictEqual(offset, result.readUInt32BE(keyBaseOffset + 8));
-    //         assert.deepStrictEqual(content, result.toString("utf8", (valueBaseOffset + offset), (valueBaseOffset + offset) + content.length));
-    //         offset += value.length;
-    //     }
-    // })
+    it('should be doing correct data assembly with multiple values', async () => {
+        const numberOfValues = 1000000;
+        const mockStore = new MockedAppendStore();
+        const content = "Hello World String";
+        const blockId = "1526919030474-55";
+        const blockIdBuff = Buffer.from(blockId);
+        const target = new Version1SortedBlocks(mockStore);
+        const value = Buffer.from(content);
+        console.time("Fill");
+        const keys = new BigInt64Array(numberOfValues);
+        const values = new Array<Buffer>();
+        for (let index = 0; index < numberOfValues; index++) {
+            keys[index] = BigInt(index);
+            values.push(value);
+        }
+        console.timeEnd("Fill");
+        console.time("Assembly");
+        const bytesWritten = target.put(blockIdBuff, keys, values, value.length);
+        console.timeEnd("Assembly");
+        console.log(bytesWritten);
+    }).timeout(-1)
+
+    // sorted-section write specs
+    // Sort: 0.069ms
+    // Sections: 0.288ms
+    // Index: 0.198ms
+    // Header: 0.112ms
+    // Packet: 0.073ms
+    // Append: 0.033ms
+    //     ✔ should be doing correct data assembly
+    // Fill: 91.315ms
+    // Sort: 1.983ms
+    // Sections: 2:28.158 (m:ss.mmm)
+    // Index: 37.377ms
+    // Header: 0.427ms
+    // Packet: 0.152ms
+    // Append: 0.019ms
+    // Assembly: 2:28.198 (m:ss.mmm)
+    // 43164
+    //     ✔ should be doing correct data assembly with multiple values (148291ms)
 });

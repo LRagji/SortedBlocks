@@ -12,7 +12,9 @@ export class Version1SortedBlocks {
 
     public put(blockId: Buffer, keys: BigInt64Array, values: Buffer[], maxValueSizeInBytes = 1024): number {
         if (keys.length != values.length) throw new Error(`Number of keys(${keys.length}) doesnot match with number of values provided(${values.length}).`);
+        console.time("Sort");
         const sortedKeys = keys.sort();
+        console.timeEnd("Sort");
         const minKey = sortedKeys[0], maxKey = sortedKeys[sortedKeys.length - 1];
         const inclusiveKeyRange = (maxKey - minKey) + BigInt(1);
         const bucketFactor = 1024;//TODO: We will calculate this later with some algo for a given range.
@@ -20,6 +22,7 @@ export class Version1SortedBlocks {
         const keysPerSection = parseInt((inclusiveKeyRange / bucketFactorBigInt).toString(), 10) + 1;
 
         //Sections
+        console.time("Sections");
         const sections = new Map<bigint, SortedSection>();
         for (let index = 0; index < sortedKeys.length; index++) {
             const key = sortedKeys[index];
@@ -30,8 +33,10 @@ export class Version1SortedBlocks {
             section.add(key, value);
             sections.set(sectionKey, section);
         }
+        console.timeEnd("Sections");
 
         //Final Index
+        console.time("Index");
         const finalIndex = new SortedSection(sections.size, (maxValueSizeInBytes + SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes));
         sections.forEach((section, sectionKey) => {
             const iResult = section.toBuffer();
@@ -46,8 +51,10 @@ export class Version1SortedBlocks {
         const block = finalIndex.toBuffer();
         const valuesBuff = block.values;
         const indexBuff = block.index;
+        console.timeEnd("Index");
 
         //Header
+        console.time("Header");
         const dataHash = this.hashResolver(valuesBuff);
         const IndexHash = this.hashResolver(indexBuff);
         const iheader = new Array<number>();//TODO:Write a new expanding Array class
@@ -69,16 +76,21 @@ export class Version1SortedBlocks {
         iheader.push(...Buffer32);
         Buffer32.writeUInt32BE(indexBuff.length, 0);
         iheader.push(...Buffer32);
+        console.timeEnd("Header");
 
         //Compose Packet
+        console.time("Packet");
         const header = Buffer.from(iheader);
         const headerHash = this.hashResolver(header);
         Buffer32.writeUInt32BE(header.length, 0);
         const headerLength = Buffer.from(Buffer32);
         const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, headerLength, headerHash, headerLength, this.version, this.SOP]);
+        console.timeEnd("Packet");
 
-        //Write
+        //Append
+        console.time("Append");
         this.appenOnlyStore.append(dataToAppend);
+        console.timeEnd("Append");
         return dataToAppend.length;
     }
 
