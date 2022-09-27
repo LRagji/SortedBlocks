@@ -3,10 +3,10 @@ import { IAppendStore } from './i-append-store';
 import { SortedSection } from './sorted-section';
 
 export class Version1SortedBlocks {
-    private readonly SOP = Buffer.from(`5092242716ebf7369dad22382acbbc10`);
-    private readonly EOP = Buffer.from(`8c734039166ca17b2f9ef603a1aedd66`);
-    private readonly version = Buffer.alloc(4)
     private readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
+    private readonly SOP = this.hashResolver(Buffer.from(`16111987`));
+    private readonly EOP = this.hashResolver(Buffer.from(`01011991`));
+    private readonly version = Buffer.alloc(4)
 
     constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUInt32BE(1); }
 
@@ -61,27 +61,21 @@ export class Version1SortedBlocks {
         Buffer32.writeUInt32BE(bucketFactor, 0);
         iheader.push(...Buffer32);
         iheader.push(...dataHash);
-        Buffer32.writeUInt32BE(dataHash.length, 0);
-        iheader.push(...Buffer32);
         iheader.push(...IndexHash);
-        Buffer32.writeUInt32BE(IndexHash.length, 0);
-        iheader.push(...Buffer32);
         iheader.push(...blockId);
         Buffer32.writeUInt32BE(blockId.length, 0);
         iheader.push(...Buffer32);
-        Buffer32.writeUInt32BE(indexBuff.length, 0);
-        iheader.push(...Buffer32);
         Buffer32.writeUInt32BE(valuesBuff.length, 0);
+        iheader.push(...Buffer32);
+        Buffer32.writeUInt32BE(indexBuff.length, 0);
         iheader.push(...Buffer32);
 
         //Compose Packet
         const header = Buffer.from(iheader);
         const headerHash = this.hashResolver(header);
-        Buffer32.writeUInt32BE(headerHash.length, 0);
-        const headerHashLength = Buffer.from(Buffer32);
         Buffer32.writeUInt32BE(header.length, 0);
         const headerLength = Buffer.from(Buffer32);
-        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerLength, headerHash, headerHashLength, headerHash, headerHashLength, this.version, this.SOP]);
+        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, headerLength, headerHash, headerLength, this.version, this.SOP]);
 
         //Write
         this.appenOnlyStore.append(dataToAppend);
