@@ -1,7 +1,6 @@
 import * as assert from 'node:assert';
-import { SortedSection } from '../../source/sorted-blocks';
+import { SortedSection } from '../../source/sorted-section';
 
-const delay = (timeInMillis: number) => new Promise((acc, rej) => setTimeout(acc, timeInMillis));
 
 
 describe(`sorted-section read specs`, () => {
