@@ -10,7 +10,7 @@ export class Version1SortedBlocks {
 
     constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUInt32BE(1); }
 
-    public put(blockId: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
+    public put(blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
         //console.time("  Sort");
         const sortedKeys = new BigInt64Array(payload.keys()).sort();
@@ -70,8 +70,8 @@ export class Version1SortedBlocks {
         iheader.push(...Buffer32);
         iheader.push(...dataHash);
         iheader.push(...IndexHash);
-        iheader.push(...blockId);
-        Buffer32.writeUInt32BE(blockId.length, 0);
+        iheader.push(...blockInfo);
+        Buffer32.writeUInt32BE(blockInfo.length, 0);
         iheader.push(...Buffer32);
         Buffer32.writeUInt32BE(valuesBuff.length, 0);
         iheader.push(...Buffer32);

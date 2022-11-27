@@ -23,11 +23,11 @@ describe(`sorted-section write specs`, () => {
     it('should be doing correct data assembly', async () => {
         const mockStore = new MockedAppendStore();
         const content = "Hello World String";
-        const blockId = "1526919030474-55";
+        const blockInfo = "1526919030474-55";
         const target = new Version1SortedBlocks(mockStore);
-        const key = BigInt(1), value = Buffer.from(content), blockIdBuff = Buffer.from(blockId);
+        const key = BigInt(1), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
 
-        const bytesReturned = target.put(blockIdBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        const bytesReturned = target.put(blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
 
         assert.deepStrictEqual(bytesReturned, mockStore.store.length);
         let start = SOP.length * -1, end = 0;//SOP
@@ -52,11 +52,11 @@ describe(`sorted-section write specs`, () => {
         const indexLength = mockStore.store.subarray(start, end).readUint32BE(0);
         end = start; start -= 4; //Data Length
         const dataLength = mockStore.store.subarray(start, end).readUint32BE(0);
-        end = start; start -= 4; //BlockId Length
-        const blockIdLength = mockStore.store.subarray(start, end).readUint32BE(0);
-        end = start; start -= blockIdLength; //BlockId
-        const aBlockId = mockStore.store.subarray(start, end).toString();
-        assert.deepStrictEqual(aBlockId, blockId);
+        end = start; start -= 4; //BlockInfo Length
+        const blockInfoLength = mockStore.store.subarray(start, end).readUint32BE(0);
+        end = start; start -= blockInfoLength; //BlockInfo
+        const aBlockInfo = mockStore.store.subarray(start, end).toString();
+        assert.deepStrictEqual(aBlockInfo, blockInfo);
         end = start; start -= 16; //Index Hash
         const IndexHash = mockStore.store.subarray(start, end);
         end = start; start -= 16; //Data Length
@@ -94,8 +94,8 @@ describe(`sorted-section write specs`, () => {
         const numberOfValues = 1000000;
         const mockStore = new MockedAppendStore();
         const content = "Hello World String";
-        const blockId = "1526919030474-55";
-        const blockIdBuff = Buffer.from(blockId);
+        const blockInfo = "1526919030474-55";
+        const blockInfoBuff = Buffer.from(blockInfo);
         const target = new Version1SortedBlocks(mockStore);
         const value = Buffer.from(content);
 
@@ -104,7 +104,7 @@ describe(`sorted-section write specs`, () => {
             payload.set(BigInt(index), value);
         }
 
-        const bytesWritten = target.put(blockIdBuff, payload, value.length);
+        const bytesWritten = target.put(blockInfoBuff, payload, value.length);
 
         console.log(bytesWritten);
     }).timeout(-1)
