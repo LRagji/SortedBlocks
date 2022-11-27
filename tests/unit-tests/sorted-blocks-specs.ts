@@ -27,7 +27,7 @@ describe(`sorted-section write specs`, () => {
         const target = new Version1SortedBlocks(mockStore);
         const key = BigInt(1), value = Buffer.from(content), blockIdBuff = Buffer.from(blockId);
 
-        const bytesReturned = target.put(blockIdBuff, new BigInt64Array([key]), [value], value.length);
+        const bytesReturned = target.put(blockIdBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
 
         assert.deepStrictEqual(bytesReturned, mockStore.store.length);
         let start = SOP.length * -1, end = 0;//SOP
@@ -98,36 +98,14 @@ describe(`sorted-section write specs`, () => {
         const blockIdBuff = Buffer.from(blockId);
         const target = new Version1SortedBlocks(mockStore);
         const value = Buffer.from(content);
-        console.time("Fill");
-        const keys = new BigInt64Array(numberOfValues);
-        const values = new Array<Buffer>();
+
+        const payload = new Map<bigint, Buffer>();
         for (let index = 0; index < numberOfValues; index++) {
-            keys[index] = BigInt(index);
-            values.push(value);
+            payload.set(BigInt(index), value);
         }
-        console.timeEnd("Fill");
-        console.time("Assembly");
-        const bytesWritten = target.put(blockIdBuff, keys, values, value.length);
-        console.timeEnd("Assembly");
+
+        const bytesWritten = target.put(blockIdBuff, payload, value.length);
+
         console.log(bytesWritten);
     }).timeout(-1)
-
-    // sorted-section write specs
-    // Sort: 0.069ms
-    // Sections: 0.288ms
-    // Index: 0.198ms
-    // Header: 0.112ms
-    // Packet: 0.073ms
-    // Append: 0.033ms
-    //     ✔ should be doing correct data assembly
-    // Fill: 91.315ms
-    // Sort: 1.983ms
-    // Sections: 2:28.158 (m:ss.mmm)
-    // Index: 37.377ms
-    // Header: 0.427ms
-    // Packet: 0.152ms
-    // Append: 0.019ms
-    // Assembly: 2:28.198 (m:ss.mmm)
-    // 43164
-    //     ✔ should be doing correct data assembly with multiple values (148291ms)
 });

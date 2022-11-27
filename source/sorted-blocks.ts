@@ -10,33 +10,35 @@ export class Version1SortedBlocks {
 
     constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUInt32BE(1); }
 
-    public put(blockId: Buffer, keys: BigInt64Array, values: Buffer[], maxValueSizeInBytes = 1024): number {
-        if (keys.length != values.length) throw new Error(`Number of keys(${keys.length}) doesnot match with number of values provided(${values.length}).`);
-        console.time("Sort");
-        const sortedKeys = keys.sort();
-        console.timeEnd("Sort");
+    public put(blockId: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
+
+        //console.time("  Sort");
+        const sortedKeys = new BigInt64Array(payload.keys()).sort();
+        //console.timeEnd("  Sort");
+
+        //console.time("  Extra");
         const minKey = sortedKeys[0], maxKey = sortedKeys[sortedKeys.length - 1];
         const inclusiveKeyRange = (maxKey - minKey) + BigInt(1);
         const bucketFactor = 1024;//TODO: We will calculate this later with some algo for a given range.
         const bucketFactorBigInt = BigInt(bucketFactor);
         const keysPerSection = parseInt((inclusiveKeyRange / bucketFactorBigInt).toString(), 10) + 1;
+        //console.timeEnd("  Extra");
 
         //Sections
-        console.time("Sections");
+        //console.time("  Sections");
         const sections = new Map<bigint, SortedSection>();
         for (let index = 0; index < sortedKeys.length; index++) {
             const key = sortedKeys[index];
-            const keyIndex = keys.indexOf(key);
-            const value = values[keyIndex];
             const sectionKey = key % bucketFactorBigInt;
             const section = sections.get(sectionKey) || new SortedSection(keysPerSection, maxValueSizeInBytes);
-            section.add(key, value);
+            //@ts-ignore
+            section.add(key, payload.get(key)); //TODO:HotSpot in terms of performance.
             sections.set(sectionKey, section);
         }
-        console.timeEnd("Sections");
+        //console.timeEnd("  Sections");
 
         //Final Index
-        console.time("Index");
+        //console.time("  Index");
         const finalIndex = new SortedSection(sections.size, (maxValueSizeInBytes + SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes));
         sections.forEach((section, sectionKey) => {
             const iResult = section.toBuffer();
@@ -51,10 +53,10 @@ export class Version1SortedBlocks {
         const block = finalIndex.toBuffer();
         const valuesBuff = block.values;
         const indexBuff = block.index;
-        console.timeEnd("Index");
+        //console.timeEnd("  Index");
 
         //Header
-        console.time("Header");
+        //console.time("  Header");
         const dataHash = this.hashResolver(valuesBuff);
         const IndexHash = this.hashResolver(indexBuff);
         const iheader = new Array<number>();//TODO:Write a new expanding Array class
@@ -76,21 +78,21 @@ export class Version1SortedBlocks {
         iheader.push(...Buffer32);
         Buffer32.writeUInt32BE(indexBuff.length, 0);
         iheader.push(...Buffer32);
-        console.timeEnd("Header");
+        //console.timeEnd("  Header");
 
         //Compose Packet
-        console.time("Packet");
+        //console.time("  Packet");
         const header = Buffer.from(iheader);
         const headerHash = this.hashResolver(header);
         Buffer32.writeUInt32BE(header.length, 0);
         const headerLength = Buffer.from(Buffer32);
         const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, headerLength, headerHash, headerLength, this.version, this.SOP]);
-        console.timeEnd("Packet");
+        //console.timeEnd(" Packet");
 
         //Append
-        console.time("Append");
+        //console.time("  Append");
         this.appenOnlyStore.append(dataToAppend);
-        console.timeEnd("Append");
+        //console.timeEnd("  Append");
         return dataToAppend.length;
     }
 
