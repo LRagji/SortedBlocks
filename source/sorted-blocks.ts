@@ -3,6 +3,15 @@ import { IAppendStore } from './i-append-store';
 import { SortedSection } from './sorted-section';
 
 export class Version1SortedBlocks {
+
+    //TODO:
+    // 1. Make Keys UINT61 from Int64(helps in modding)
+    // 2. Change Terminology according to google sheet document.
+    // 3. Move googlee sheet to Readme as md
+    // 3.5 Should we Keep IStore or ICursor impplemeentation?
+    // 4. Think of a way to make this into KD Tree Multidimensional
+    // 5. Think of Caching Tree in Redis
+    // 6. Build a state machine to Read byte by byte and merge into API 
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
     private static readonly magicBuffer = Version1SortedBlocks.hashResolver(Buffer.from(`16111987`));
     public static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
