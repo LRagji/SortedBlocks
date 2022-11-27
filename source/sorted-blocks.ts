@@ -39,14 +39,13 @@ export class Version1SortedBlocks {
 
         //Final Index
         //console.time("  Index");
+        const indexDataLength = Buffer.alloc(8);
         const finalIndex = new SortedSection(sections.size, (maxValueSizeInBytes + SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes));
         sections.forEach((section, sectionKey) => {
             const iResult = section.toBuffer();
-            const BufferIndexLength32 = Buffer.alloc(4);
-            BufferIndexLength32.writeUInt32BE(iResult.index.length, 0);
-            const BufferDataLength32 = Buffer.alloc(4);
-            BufferDataLength32.writeUInt32BE(iResult.values.length, 0);
-            const sectionBuff = Buffer.concat([BufferIndexLength32, BufferDataLength32, iResult.index, iResult.values]);
+            indexDataLength.writeUInt32BE(iResult.index.length, 0);
+            indexDataLength.writeUInt32BE(iResult.values.length, 4);
+            const sectionBuff = Buffer.concat([indexDataLength, iResult.index, iResult.values]);
             finalIndex.add(sectionKey, sectionBuff);
         });
         sections.clear();
