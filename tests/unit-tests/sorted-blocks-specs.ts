@@ -6,9 +6,9 @@ import { MockedAppendStore } from '../utilities/mock-store';
 const hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
 const SOP = Version1SortedBlocks.SOP;
 const EOP = Version1SortedBlocks.EOP;
-const version = Buffer.alloc(4);
+const version = Buffer.alloc(1);
 const bucketFactor = 1024;
-version.writeUInt32BE(1);
+version.writeUIntBE(1, 0, 1);
 
 describe(`sorted-section write specs`, () => {
 

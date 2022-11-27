@@ -6,9 +6,9 @@ export class Version1SortedBlocks {
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
     public static readonly SOP = Buffer.from(Version1SortedBlocks.hashResolver(Buffer.from(`16111987`)), 0, 4);
     public static readonly EOP = Buffer.from(Version1SortedBlocks.hashResolver(Buffer.from(`16111987`)), 12, 4);
-    private readonly version = Buffer.alloc(4)
+    private readonly version = Buffer.alloc(1)
 
-    constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUInt32BE(1); }
+    constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUIntBE(1, 0, 1); }
 
     public put(blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
