@@ -4,8 +4,9 @@ import { SortedSection } from './sorted-section';
 
 export class Version1SortedBlocks {
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-    public static readonly SOP = Buffer.from(Version1SortedBlocks.hashResolver(Buffer.from(`16111987`)), 0, 4);
-    public static readonly EOP = Buffer.from(Version1SortedBlocks.hashResolver(Buffer.from(`16111987`)), 12, 4);
+    private static readonly magicBuffer = Version1SortedBlocks.hashResolver(Buffer.from(`16111987`));
+    public static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
+    public static readonly EOP = Version1SortedBlocks.magicBuffer.subarray(12, 16);
     private readonly version = Buffer.alloc(1)
 
     constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUIntBE(1, 0, 1); }
@@ -83,9 +84,9 @@ export class Version1SortedBlocks {
         //console.time("  Packet");
         const header = Buffer.from(iheader);
         const headerHash = Version1SortedBlocks.hashResolver(header);
-        Buffer32.writeUInt32BE(header.length, 0);
-        const headerLength = Buffer.from(Buffer32);
-        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, headerLength, headerHash, headerLength, this.version, Version1SortedBlocks.SOP]);
+        //Buffer32.writeUInt32BE(header.length, 0);
+        //const headerLength = Buffer.from(Buffer32);
+        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, this.version, headerHash, Version1SortedBlocks.SOP]);
         //console.timeEnd(" Packet");
 
         //Append

@@ -394,3 +394,32 @@ export class SortedHeader {
         }
     }
 }
+
+export function indexOfSequence(buff: Buffer, sequence: Buffer): number {
+    if (sequence.length > buff.length) {
+        throw new Error(`Param "sequence"(${sequence.length}) cannot be bigger in length than "buff"(${buff.length}).`);
+    }
+    let scanResult = 0;
+    do {
+        scanResult = buff.indexOf(sequence[0] as number, scanResult);
+        if (scanResult + sequence.length > buff.length) {
+            scanResult = -1;
+            break;
+        }
+        if (scanResult > -1) {
+            for (let seqIdx = 0; seqIdx < sequence.length; seqIdx++) {
+                const excepted = sequence[seqIdx];
+                const actual = buff[scanResult + seqIdx];
+                if (actual !== excepted) {
+                    break;
+                }
+                else if (seqIdx === (sequence.length - 1)) {
+                    //Return we have found the match
+                    return scanResult;
+                }
+            }
+        }
+    }
+    while (scanResult > -1)
+    return scanResult;
+}
