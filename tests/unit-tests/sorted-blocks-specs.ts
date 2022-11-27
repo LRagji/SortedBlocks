@@ -4,8 +4,8 @@ import { Version1SortedBlocks } from '../../source/sorted-blocks';
 import { MockedAppendStore } from '../utilities/mock-store';
 
 const hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-const SOP = hashResolver(Buffer.from(`16111987`));;
-const EOP = hashResolver(Buffer.from(`01011991`));
+const SOP = Version1SortedBlocks.SOP;
+const EOP = Version1SortedBlocks.EOP;
 const version = Buffer.alloc(4);
 const bucketFactor = 1024;
 version.writeUInt32BE(1);

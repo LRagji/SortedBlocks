@@ -3,9 +3,9 @@ import { IAppendStore } from './i-append-store';
 import { SortedSection } from './sorted-section';
 
 export class Version1SortedBlocks {
-    private readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-    private readonly SOP = this.hashResolver(Buffer.from(`16111987`));
-    private readonly EOP = this.hashResolver(Buffer.from(`01011991`));
+    private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
+    public static readonly SOP = Buffer.from(Version1SortedBlocks.hashResolver(Buffer.from(`16111987`)), 0, 4);
+    public static readonly EOP = Buffer.from(Version1SortedBlocks.hashResolver(Buffer.from(`16111987`)), 12, 4);
     private readonly version = Buffer.alloc(4)
 
     constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUInt32BE(1); }
@@ -56,12 +56,12 @@ export class Version1SortedBlocks {
 
         //Header
         //console.time("  Header");
-        const dataHash = this.hashResolver(valuesBuff);
-        const IndexHash = this.hashResolver(indexBuff);
+        const dataHash = Version1SortedBlocks.hashResolver(valuesBuff);
+        const IndexHash = Version1SortedBlocks.hashResolver(indexBuff);
         const iheader = new Array<number>();//TODO:Write a new expanding Array class
         const Buffer64 = Buffer.alloc(8);
         const Buffer32 = Buffer.alloc(4);
-        iheader.push(...this.EOP);
+        iheader.push(...Version1SortedBlocks.EOP);
         Buffer64.writeBigInt64BE(minKey, 0);
         iheader.push(...Buffer64);
         Buffer64.writeBigInt64BE(maxKey, 0);
@@ -82,10 +82,10 @@ export class Version1SortedBlocks {
         //Compose Packet
         //console.time("  Packet");
         const header = Buffer.from(iheader);
-        const headerHash = this.hashResolver(header);
+        const headerHash = Version1SortedBlocks.hashResolver(header);
         Buffer32.writeUInt32BE(header.length, 0);
         const headerLength = Buffer.from(Buffer32);
-        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, headerLength, headerHash, headerLength, this.version, this.SOP]);
+        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, headerLength, headerHash, headerLength, this.version, Version1SortedBlocks.SOP]);
         //console.timeEnd(" Packet");
 
         //Append
