@@ -5,8 +5,9 @@ import { indexOfSequence } from '../../source/';
 import { MockedAppendStore, MockedStore } from '../utilities/mock-store';
 
 const hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-const SOP = Version1SortedBlocks.SOP;
-const EOP = Version1SortedBlocks.EOP;
+const magicBuffer = hashResolver(Buffer.from(`16111987`));
+const SOP = magicBuffer.subarray(0, 4);;
+const EOP = magicBuffer.subarray(12, 16);
 const version = Buffer.alloc(1);
 const bucketFactor = 1024;
 version.writeUIntBE(1, 0, 1);
@@ -25,10 +26,10 @@ describe(`sorted-section write specs`, () => {
         const mockStore = new MockedAppendStore();
         const content = "Hello World String";
         const blockInfo = "1526919030474-55";
-        const target = new Version1SortedBlocks(mockStore);
+
         const key = BigInt(1), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
 
-        const bytesReturned = target.put(blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        const bytesReturned = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
 
         assert.deepStrictEqual(bytesReturned, mockStore.store.length);
 
@@ -99,7 +100,6 @@ describe(`sorted-section write specs`, () => {
         const content = "Hello World String";
         const blockInfo = "1526919030474-55";
         const blockInfoBuff = Buffer.from(blockInfo);
-        const target = new Version1SortedBlocks(mockStore);
         const value = Buffer.from(content);
 
         const payload = new Map<bigint, Buffer>();
@@ -107,7 +107,7 @@ describe(`sorted-section write specs`, () => {
             payload.set(BigInt(index), value);
         }
 
-        const bytesWritten = target.put(blockInfoBuff, payload, value.length);
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, payload, value.length);
 
         console.log(bytesWritten);
     }).timeout(-1)

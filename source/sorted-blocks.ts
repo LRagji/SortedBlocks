@@ -6,21 +6,21 @@ export class Version1SortedBlocks {
 
     //TODO:
     // 1. Make Keys UINT61 from Int64(helps in modding)
+    // 1.2 Change Modding algo to start of bucket
     // 2. Change Terminology according to google sheet document.
     // 3. Move googlee sheet to Readme as md
     // 3.5 Should we Keep IStore or ICursor impplemeentation?
     // 4. Think of a way to make this into KD Tree Multidimensional
     // 5. Think of Caching Tree in Redis
     // 6. Build a state machine to Read byte by byte and merge into API 
+    // 7. Remove maxValueSizeInBytes from serialize
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
     private static readonly magicBuffer = Version1SortedBlocks.hashResolver(Buffer.from(`16111987`));
-    public static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
-    public static readonly EOP = Version1SortedBlocks.magicBuffer.subarray(12, 16);
-    private readonly version = Buffer.alloc(1)
+    private static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
+    private static readonly EOP = Version1SortedBlocks.magicBuffer.subarray(12, 16);
+    private static readonly version = Uint8Array.from([1]);
 
-    constructor(private readonly appenOnlyStore: IAppendStore) { this.version.writeUIntBE(1, 0, 1); }
-
-    public put(blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
+    public static serialize(appenOnlyStore: IAppendStore, blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
         //console.time("  Sort");
         const sortedKeys = new BigInt64Array(payload.keys()).sort();
@@ -95,21 +95,32 @@ export class Version1SortedBlocks {
         const headerHash = Version1SortedBlocks.hashResolver(header);
         //Buffer32.writeUInt32BE(header.length, 0);
         //const headerLength = Buffer.from(Buffer32);
-        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, this.version, headerHash, Version1SortedBlocks.SOP]);
+        const dataToAppend = Buffer.concat([valuesBuff, indexBuff, header, headerHash, Version1SortedBlocks.version, headerHash, Version1SortedBlocks.SOP]);
         //console.timeEnd(" Packet");
 
         //Append
         //console.time("  Append");
-        this.appenOnlyStore.append(dataToAppend);
+        appenOnlyStore.append(dataToAppend);
         //console.timeEnd("  Append");
         return dataToAppend.length;
     }
+
+    public static deserialize(appenOnlyStore: IAppendStore, offset = -1): Version1SortedBlocks {
+        throw new Error("TBI");
+    }
+
+
+    constructor() { }
 
     public get(key: Buffer): Buffer {
         throw new Error("TBI");
     }
 
     public *iterate(): Generator<[key: Buffer, value: Buffer]> {
+        throw new Error("TBI");
+    }
+
+    public cache(includeSubSections = false): Buffer {
         throw new Error("TBI");
     }
 }
