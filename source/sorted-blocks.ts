@@ -285,9 +285,9 @@ export class Version1SortedBlocks {
             let readOffset = this.meta.actualHeaderEndPosition;
             let accumulator = Buffer.alloc(0);
             let data: Buffer | null = Buffer.alloc(0);
-            while (readOffset < (this.meta.actualHeaderEndPosition + this.meta.indexLength) && data != null) {
+            while (readOffset > (this.meta.actualHeaderEndPosition - this.meta.indexLength) && data != null) {
                 accumulator = Buffer.concat([data, accumulator]);
-                readOffset += data.length;
+                readOffset -= data.length;
                 data = this.appendOnlyStore.reverseRead(readOffset);
             }
             accumulator = accumulator.subarray(accumulator.length - this.meta.indexLength);
@@ -304,7 +304,7 @@ export class Version1SortedBlocks {
                 end = start;
                 start -= 4;
                 const relativeOffset = accumulator.subarray(start, end).readUint32BE();
-                const absoluteOffset = this.meta.actualHeaderEndPosition + this.meta.indexLength + relativeOffset;
+                const absoluteOffset = this.meta.actualHeaderEndPosition - (this.meta.indexLength + relativeOffset);
                 this.sectionToAbsoluteOffsetPointers.set(sectionKey, absoluteOffset);
                 readOffset = start;
             }
@@ -321,7 +321,7 @@ export class Version1SortedBlocks {
             let readOffset = absoluteOffset;
             let accumulator = Buffer.alloc(0);
             let data: Buffer | null = Buffer.alloc(0);
-            while (readOffset < (absoluteOffset + bytesForIndexLength + bytesForDataLength) && data != null) {
+            while (readOffset > (absoluteOffset - (bytesForIndexLength + bytesForDataLength)) && data != null) {
                 accumulator = Buffer.concat([data, accumulator]);
                 readOffset -= data.length;
                 data = this.appendOnlyStore.reverseRead(readOffset);

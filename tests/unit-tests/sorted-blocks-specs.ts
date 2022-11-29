@@ -88,6 +88,6 @@ describe(`sorted-section write specs`, () => {
 
         const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, payload, value.length);
         assert.deepStrictEqual(bytesWritten, mockStore.store.length);
-
+        console.log(`1 Million blocksize ${bytesWritten} Bytes with ${value.length} Bytes of payload.`)
     }).timeout(-1)
 });

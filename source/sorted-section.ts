@@ -23,7 +23,7 @@ export class SortedSection {
     }
 
     toBuffer(): { index: Buffer, values: Buffer } {
-        const returnValue = { index: Buffer.from(this.index, 0, this.indexBytePointer), values: Buffer.from(this.payload, 0, this.payloadBytePointer) };
+        const returnValue = { index: Buffer.from(this.index.subarray(0, this.indexBytePointer)), values: Buffer.from(this.payload.subarray(0, this.payloadBytePointer)) };
         this.index = Buffer.allocUnsafe(0);
         this.payload = Buffer.allocUnsafe(0);
         this.indexBytePointer = 0;
