@@ -32,13 +32,13 @@ describe(`sorted-section write specs`, () => {
 
         const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
         if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
-        assert.strictEqual(sortedBlock.headerInfo.storeId, mockStore.Id);
-        assert.strictEqual(sortedBlock.headerInfo.keyRangeMax, key);
-        assert.strictEqual(sortedBlock.headerInfo.keyRangeMin, key);
-        assert.strictEqual(sortedBlock.headerInfo.keyBucketFactor, 1024);
-        assert.deepEqual(sortedBlock.headerInfo.blockInfo, blockInfoBuff);
-        assert.strictEqual(sortedBlock.headerInfo.actualHeaderStartPosition, 164);
-        assert.strictEqual(sortedBlock.headerInfo.actualHeaderEndPosition, 42);
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, 1024);
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+        assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 164);
+        assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 42);
     })
 
     it('shoud be able to serialize and deserialize data to its original form when reading random length bytes from store underneath', async () => {
@@ -54,13 +54,13 @@ describe(`sorted-section write specs`, () => {
 
         const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
         if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
-        assert.strictEqual(sortedBlock.headerInfo.storeId, mockStore.Id);
-        assert.strictEqual(sortedBlock.headerInfo.keyRangeMax, key);
-        assert.strictEqual(sortedBlock.headerInfo.keyRangeMin, key);
-        assert.strictEqual(sortedBlock.headerInfo.keyBucketFactor, 1024);
-        assert.deepEqual(sortedBlock.headerInfo.blockInfo, blockInfoBuff);
-        assert.strictEqual(sortedBlock.headerInfo.actualHeaderStartPosition, 164);
-        assert.strictEqual(sortedBlock.headerInfo.actualHeaderEndPosition, 42);
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, 1024);
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+        assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 164);
+        assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 42);
     })
 
     // it('should throw if key is already presented', async () => {

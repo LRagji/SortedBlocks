@@ -5,6 +5,7 @@ import { SortedSection } from './sorted-section';
 export class Version1SortedBlocks {
 
     //TODO:
+    // 0. Change algorith to start of group with mod
     // 1. Make Keys UINT61 from Int64(helps in modding)
     // 1.2 Change Modding algo to start of bucket
     // 2. Change Terminology according to google sheet document.
@@ -228,7 +229,7 @@ export class Version1SortedBlocks {
                 "actualHeaderEndPosition": actualEndPosition,
                 "keyRangeMin": rootMin,
                 "keyRangeMax": rootMax,
-                "keyBucketFactor": rootBucketFactor,
+                "keyBucketFactor": BigInt(rootBucketFactor),
                 "blockInfo": blockInfo,
                 "indexHash": rootIndexHash,
                 "dataHash": rootDataHash,
@@ -242,12 +243,14 @@ export class Version1SortedBlocks {
         return returnValue;
     }
 
+    private readonly sectionToAbsoluteOffsetPointers = new Map<bigint, number>();
+    private readonly keysToValueOffset = new Map<number, Map<bigint, { absStart: number, absEnd: number }>>();
     constructor(
-        public readonly headerInfo: {
+        public readonly meta: {
             actualHeaderEndPosition: number,
             keyRangeMin: bigint,
             keyRangeMax: bigint,
-            keyBucketFactor: number,
+            keyBucketFactor: bigint,
             blockInfo: Buffer,
             indexHash: Buffer,
             dataHash: Buffer,
@@ -258,13 +261,129 @@ export class Version1SortedBlocks {
             storeId: string
         },
         private readonly appendOnlyStore: IAppendStore
-    ) { }
-
-    public get(key: Buffer): Buffer {
-        throw new Error("TBI");
+    ) {
+        if (this.meta == null) {
+            throw new Error(`Parameter "meta" is needed for the block to be constructed.`)
+        }
+        if (this.appendOnlyStore == null) {
+            throw new Error(`Parameter "appendOnlyStore" is needed for the block to be constructed.`)
+        }
+        if (this.meta.storeId != this.appendOnlyStore.Id) {
+            throw new Error(`Store ids should match [${this.meta.storeId} = ${this.appendOnlyStore.Id}].`)
+        }
     }
 
-    public * iterate(): Generator<[key: Buffer, value: Buffer]> {
+    public get(key: bigint): Buffer | null {
+        if (key > this.meta.keyRangeMax || key < this.meta.keyRangeMin) {
+            return null;
+        }
+        const keySection = key - key % this.meta.keyBucketFactor;
+        if (this.sectionToAbsoluteOffsetPointers.size > 0 && !this.sectionToAbsoluteOffsetPointers.has(keySection)) {
+            return null;
+        }
+        if (this.sectionToAbsoluteOffsetPointers.size === 0) {
+            //Fill the map
+            let readOffset = this.meta.actualHeaderEndPosition;
+            let accumulator = Buffer.alloc(0);
+            let data: Buffer | null = Buffer.alloc(0);
+            while (readOffset < (this.meta.actualHeaderEndPosition + this.meta.indexLength) && data != null) {
+                accumulator = Buffer.concat([data, accumulator]);
+                readOffset += data.length;
+                data = this.appendOnlyStore.reverseRead(readOffset);
+            }
+            accumulator = accumulator.subarray(accumulator.length - this.meta.indexLength);
+            const computedHash = Version1SortedBlocks.hashResolver(accumulator);
+            if (this.meta.indexHash.reduce((a, e, idx) => a && e === computedHash[idx], true) === false) {
+                throw new Error(`Data Integrity check failed! Index hash do not match actual:${this.meta.indexHash} expected:${computedHash}}.`);
+            }
+            readOffset = accumulator.length;
+            let start = readOffset, end = readOffset;
+            while (readOffset > 0) {
+                end = start;
+                start -= 8;
+                const sectionKey = accumulator.subarray(start, end).readBigInt64BE();
+                end = start;
+                start -= 4;
+                const relativeOffset = accumulator.subarray(start, end).readUint32BE();
+                const absoluteOffset = this.meta.actualHeaderEndPosition + this.meta.indexLength + relativeOffset;
+                this.sectionToAbsoluteOffsetPointers.set(sectionKey, absoluteOffset);
+                readOffset = start;
+            }
+        }
+        const absoluteOffset = this.sectionToAbsoluteOffsetPointers.get(keySection);
+        if (absoluteOffset == undefined) {
+            return null;
+        }
+        //This means we have the section key
+        let kvPointer = this.keysToValueOffset.get(absoluteOffset);
+        if (kvPointer == undefined) {
+            //Read from the disk
+            const bytesForIndexLength = 4, bytesForDataLength = 4;
+            let readOffset = absoluteOffset;
+            let accumulator = Buffer.alloc(0);
+            let data: Buffer | null = Buffer.alloc(0);
+            while (readOffset < (absoluteOffset + bytesForIndexLength + bytesForDataLength) && data != null) {
+                accumulator = Buffer.concat([data, accumulator]);
+                readOffset -= data.length;
+                data = this.appendOnlyStore.reverseRead(readOffset);
+            }
+            accumulator = accumulator.subarray(accumulator.length - (bytesForDataLength + bytesForIndexLength));
+            const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
+            const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
+
+            readOffset = absoluteOffset - bytesForIndexLength - bytesForDataLength;
+            data = Buffer.alloc(0);
+            accumulator = Buffer.alloc(0);
+            while (readOffset <= (absoluteOffset - bytesForIndexLength - bytesForDataLength - indexLength) && data != null) {
+                accumulator = Buffer.concat([data, accumulator]);
+                readOffset -= data.length;
+                data = this.appendOnlyStore.reverseRead(readOffset);
+            }
+            accumulator = accumulator.subarray(accumulator.length - (bytesForDataLength + bytesForIndexLength + indexLength));
+            readOffset = accumulator.length;
+            let start = readOffset, end = readOffset;
+            let actualKeyOffsetMap = this.keysToValueOffset.get(absoluteOffset) || new Map<bigint, { absStart: number, absEnd: number }>();
+            while (readOffset > 0) {
+                end = start;
+                start -= 8;
+                const actualKey = accumulator.subarray(start, end).readBigInt64BE();
+                end = start;
+                start -= 4;
+                const relativeOffset = accumulator.subarray(start, end).readUint32BE();
+                actualKeyOffsetMap.set(actualKey, { absStart: (absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: 0 });
+                readOffset = start;
+            }
+            const values = Array.from(actualKeyOffsetMap.values());
+            for (let index = (values.length - 1); index > 0; index--) {
+                if (index === values.length - 1) {
+                    values[index].absEnd = absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength);
+
+                }
+                values[index - 1].absEnd = values[index].absStart;
+            }
+            this.keysToValueOffset.set(absoluteOffset, actualKeyOffsetMap);
+            kvPointer = this.keysToValueOffset.get(absoluteOffset);
+        }
+        if (kvPointer == undefined) {
+            throw new Error(`Data Integrity check failed!, section ${absoluteOffset} returnign empty list, run full block data integrity check.`)
+        }
+        const absoluteSpace = kvPointer.get(key);
+        if (absoluteSpace == undefined) {
+            return null;
+        }
+        let readOffset = absoluteSpace.absStart;
+        let data: Buffer | null = Buffer.alloc(0);
+        let accumulator = Buffer.alloc(0);
+        while (readOffset <= absoluteSpace.absEnd && data != null) {
+            accumulator = Buffer.concat([data, accumulator]);
+            readOffset -= data.length;
+            data = this.appendOnlyStore.reverseRead(readOffset);
+        }
+        accumulator = accumulator.subarray(accumulator.length - (absoluteSpace.absStart = absoluteSpace.absEnd));
+        return accumulator;
+    }
+
+    public * iterate(): Generator<[key: bigint, value: Buffer]> {
         throw new Error("TBI");
     }
 }
