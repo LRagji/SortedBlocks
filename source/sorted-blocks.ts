@@ -117,26 +117,31 @@ export class Version1SortedBlocks {
             data = appendOnlyStore.reverseRead(offset);
             if (data != null && data.length > 0) {
                 accumulator = Buffer.concat([data, accumulator]);
-                const indexOfFirstByte = data.indexOf(gaurdsIndexesToFind[state][0]);//When written EOP -- -- --> SOP Left to Right When read back it will be Right to Left
-                if (indexOfFirstByte !== -1 && accumulator.length >= (gaurdsIndexesToFind[state].length + indexOfFirstByte)
-                    && gaurdsIndexesToFind[state].reduce((a, e, idx) => a && e === accumulator[indexOfFirstByte + idx], true)) {
-                    if (state === 0) {
-                        accumulator = accumulator.subarray(indexOfFirstByte, (indexOfFirstByte + gaurdsIndexesToFind[state].length));
-                        //Next 2 lines written to search EOP in the same segment read, where SOP was found. Forcing the same offset be read twice
-                        accumulator = accumulator.subarray(data.length);
-                        data = Buffer.alloc(0);
+                let indexOfFirstByte = -1;
+                do {
+                    indexOfFirstByte = data.indexOf(gaurdsIndexesToFind[state][0], (indexOfFirstByte + 1));//When written EOP -- -- --> SOP Left to Right When read back it will be Right to Left
+                    if (indexOfFirstByte !== -1 && accumulator.length >= (gaurdsIndexesToFind[state].length + indexOfFirstByte)
+                        && gaurdsIndexesToFind[state].reduce((a, e, idx) => a && e === accumulator[indexOfFirstByte + idx], true)) {
+                        if (state === 0) {
+                            actualStartPosition = (offset - data.length) + (indexOfFirstByte + 1 + gaurdsIndexesToFind[state].length);
+                            accumulator = accumulator.subarray(0, (indexOfFirstByte + gaurdsIndexesToFind[state].length));//Trims the right end of the buffer
+                            //Next 2 lines written to search EOP in the same segment read, where SOP was found. Forcing the same offset be read twice
+                            accumulator = accumulator.subarray(data.length);//Trim the recently added data only
+                            data = Buffer.alloc(0);
+                        }
+                        else if (state === 1) {
+                            accumulator = accumulator.subarray(indexOfFirstByte);
+                            actualEndPosition = offset - (data.length - indexOfFirstByte);
+                        }
+                        indexOfFirstByte = -1;
+                        state++;
                     }
-                    else if (state === 1) {
-                        accumulator = accumulator.subarray(indexOfFirstByte);
-                        actualStartPosition = offset - (data.length - indexOfFirstByte);
-                        actualEndPosition = offset + accumulator.length;
+                    else if (state === 0 && accumulator.length > data.length + accumulatorMaxLength) {
+                        //Trim the segment so that it doesnt grow infinitely when SOP is not found.
+                        accumulator = accumulator.subarray(0, data.length + accumulatorMaxLength);
                     }
-
-                    state++;
                 }
-                else if (state === 0 && accumulator.length > accumulatorMaxLength) {
-                    accumulator = accumulator.subarray(0, accumulatorMaxLength);
-                }
+                while (indexOfFirstByte !== -1)
                 offset -= data.length;
             }
             else {
@@ -219,7 +224,8 @@ export class Version1SortedBlocks {
             }
 
             return new Version1SortedBlocks({
-                "actualHeaderEndPoisition": actualEndPosition,
+                "actualHeaderStartPosition": actualStartPosition,
+                "actualHeaderEndPosition": actualEndPosition,
                 "keyRangeMin": rootMin,
                 "keyRangeMax": rootMax,
                 "keyBucketFactor": rootBucketFactor,
@@ -229,7 +235,7 @@ export class Version1SortedBlocks {
                 "indexLength": rootIndexLength,
                 "dataLength": rootDataLength,
                 "headerHash": headerHash1,
-                "actualHeaderStart": actualStartPosition
+                "storeId": appendOnlyStore.Id
             }, appendOnlyStore);
         }
 
@@ -238,7 +244,7 @@ export class Version1SortedBlocks {
 
     constructor(
         public readonly headerInfo: {
-            actualHeaderEndPoisition: number,
+            actualHeaderEndPosition: number,
             keyRangeMin: bigint,
             keyRangeMax: bigint,
             keyBucketFactor: number,
@@ -248,7 +254,8 @@ export class Version1SortedBlocks {
             indexLength: number,
             dataLength: number,
             headerHash: Buffer,
-            actualHeaderStart: number
+            actualHeaderStartPosition: number,
+            storeId: string
         },
         private readonly appendOnlyStore: IAppendStore
     ) { }
@@ -258,10 +265,6 @@ export class Version1SortedBlocks {
     }
 
     public * iterate(): Generator<[key: Buffer, value: Buffer]> {
-        throw new Error("TBI");
-    }
-
-    public cache(includeSubSections = false): Buffer {
         throw new Error("TBI");
     }
 }
