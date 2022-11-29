@@ -35,10 +35,12 @@ describe(`sorted-section write specs`, () => {
         assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
         assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
         assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
-        assert.strictEqual(sortedBlock.meta.keyBucketFactor, 1024);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
         assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
         assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 164);
         assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 42);
+
+        //console.log(sortedBlock.get(key));
     })
 
     it('shoud be able to serialize and deserialize data to its original form when reading random length bytes from store underneath', async () => {
@@ -57,7 +59,7 @@ describe(`sorted-section write specs`, () => {
         assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
         assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
         assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
-        assert.strictEqual(sortedBlock.meta.keyBucketFactor, 1024);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
         assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
         assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 164);
         assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 42);
