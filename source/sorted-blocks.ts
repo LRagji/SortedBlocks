@@ -32,7 +32,6 @@ export class Version1SortedBlocks {
         const inclusiveKeyRange = (maxKey - minKey) + BigInt(1);
         const bucketFactor = 1024;//TODO: We will calculate this later with some algo for a given range.
         const bucketFactorBigInt = BigInt(bucketFactor);
-        const keysPerSection = parseInt((inclusiveKeyRange / bucketFactorBigInt).toString(), 10) + 1;
         //console.timeEnd("  Extra");
 
         //Sections
@@ -40,8 +39,8 @@ export class Version1SortedBlocks {
         const sections = new Map<bigint, SortedSection>();
         for (let index = 0; index < sortedKeys.length; index++) {
             const key = sortedKeys[index];
-            const sectionKey = key % bucketFactorBigInt;
-            const section = sections.get(sectionKey) || new SortedSection(keysPerSection, maxValueSizeInBytes);
+            const sectionKey = key - key % bucketFactorBigInt;
+            const section = sections.get(sectionKey) || new SortedSection(bucketFactor, maxValueSizeInBytes);
             //@ts-ignore
             section.add(key, payload.get(key)); //TODO:HotSpot in terms of performance.
             sections.set(sectionKey, section);
