@@ -22,6 +22,20 @@ describe(`sorted-section write specs`, () => {
 
     });
 
+    it('shoud be able to serialize and deserialize data to its original form', async () => {
+        const mockStore = new MockedAppendStore();
+        const content = "Hello World String";
+        const blockInfo = "1526919030474-55";
+
+        const key = BigInt(1), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
+
+        const bytesReturned = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+
+        assert.deepStrictEqual(bytesReturned, mockStore.store.length);
+
+        const index = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+    })
+
     it('should be doing correct data assembly', async () => {
         const mockStore = new MockedAppendStore();
         const content = "Hello World String";

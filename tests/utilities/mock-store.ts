@@ -18,10 +18,14 @@ export class MockedStore implements IStore {
 
 export class MockedAppendStore implements IAppendStore {
 
-    constructor(public store: Buffer = Buffer.alloc(0)) { }
+    constructor(public store: Buffer = Buffer.alloc(0), public readCallback = () => 1) { }
 
     reverseRead(fromPosition: number): Buffer {
-        throw new Error("Method not implemented.");
+        if (fromPosition < 0) {
+            throw new Error(`Param "offset" cannot be lesser than 0.`);
+        }
+        const start = fromPosition - this.readCallback();
+        return this.store.subarray(start, fromPosition);
     }
 
     append(data: Buffer): void {

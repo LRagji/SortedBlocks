@@ -20,7 +20,7 @@ export class Version1SortedBlocks {
     private static readonly EOP = Version1SortedBlocks.magicBuffer.subarray(12, 16);
     private static readonly version = Uint8Array.from([1]);
 
-    public static serialize(appenOnlyStore: IAppendStore, blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
+    public static serialize(appendOnlyStore: IAppendStore, blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
         //console.time("  Sort");
         const sortedKeys = new BigInt64Array(payload.keys()).sort();
@@ -100,40 +100,42 @@ export class Version1SortedBlocks {
 
         //Append
         //console.time("  Append");
-        appenOnlyStore.append(dataToAppend);
+        appendOnlyStore.append(dataToAppend);
         //console.timeEnd("  Append");
         return dataToAppend.length;
     }
 
-    public static deserialize(appenOnlyStore: IAppendStore, offset: number): Version1SortedBlocks | null {
+    public static deserialize(appendOnlyStore: IAppendStore, offset: number): Version1SortedBlocks | null {
         const accumulatorMaxLength = Math.max(Version1SortedBlocks.SOP.length, Version1SortedBlocks.EOP.length) * 2;
         let accumulator = Buffer.alloc(0);
         const gaurdsIndexesToFind = [Version1SortedBlocks.SOP, Version1SortedBlocks.EOP];
-        const gaurdsIndexes = [-1, -1];
         let state = 0;
         let returnValue: Version1SortedBlocks | null = null;
-        if (offset < 0) {
-            throw new Error(`Param "offset" cannot be lesser than 0.`);
-        }
         let data: Buffer | null = null;
+        let actualStartPosition = -1, actualEndPosition = -1;
         do {
-            data = appenOnlyStore.reverseRead(offset);
+            data = appendOnlyStore.reverseRead(offset);
             if (data != null && data.length > 0) {
                 accumulator = Buffer.concat([data, accumulator]);
-                const indexFirstByteSOP = data.indexOf(gaurdsIndexesToFind[state][0]);//When written EOP -- -- --> SOP Left to Right When read back it will be Right to Left
-                if (indexFirstByteSOP !== -1 && accumulator.length >= (gaurdsIndexesToFind[state].length + indexFirstByteSOP)
-                    && gaurdsIndexesToFind[state].reduce((a, e, idx) => a && e === accumulator[indexFirstByteSOP + idx], true)) {
+                const indexOfFirstByte = data.indexOf(gaurdsIndexesToFind[state][0]);//When written EOP -- -- --> SOP Left to Right When read back it will be Right to Left
+                if (indexOfFirstByte !== -1 && accumulator.length >= (gaurdsIndexesToFind[state].length + indexOfFirstByte)
+                    && gaurdsIndexesToFind[state].reduce((a, e, idx) => a && e === accumulator[indexOfFirstByte + idx], true)) {
                     if (state === 0) {
-                        gaurdsIndexes[state] = indexFirstByteSOP + gaurdsIndexesToFind[state].length;
-                        //Next 2 lines done to search EOP in the same segment read, where SOP was found. Forcing the same offset be read twice
-                        accumulator = Buffer.from(accumulator, data.length);
+                        accumulator = accumulator.subarray(indexOfFirstByte, (indexOfFirstByte + gaurdsIndexesToFind[state].length));
+                        //Next 2 lines written to search EOP in the same segment read, where SOP was found. Forcing the same offset be read twice
+                        accumulator = accumulator.subarray(data.length);
                         data = Buffer.alloc(0);
                     }
-                    gaurdsIndexes[state] = indexFirstByteSOP;
+                    else if (state === 1) {
+                        accumulator = accumulator.subarray(indexOfFirstByte);
+                        actualStartPosition = offset - (data.length - indexOfFirstByte);
+                        actualEndPosition = offset + accumulator.length;
+                    }
+
                     state++;
                 }
                 else if (state === 0 && accumulator.length > accumulatorMaxLength) {
-                    accumulator = Buffer.from(accumulator, 0, accumulatorMaxLength);
+                    accumulator = accumulator.subarray(0, accumulatorMaxLength);
                 }
                 offset -= data.length;
             }
@@ -143,13 +145,11 @@ export class Version1SortedBlocks {
         }
         while (offset > 0 && state < gaurdsIndexesToFind.length)
 
-        if (gaurdsIndexes[0] !== -1 && gaurdsIndexes[1] !== -1) {
-            const actualPosition = offset + gaurdsIndexes[1];
-            accumulator = Buffer.from(accumulator, gaurdsIndexes[1], (gaurdsIndexes[0] + gaurdsIndexes[1] + 1));
+        if (state === gaurdsIndexesToFind.length) {
             //SOP Validation
             let endIndex = accumulator.length;
             let beginIndex = endIndex - gaurdsIndexesToFind[0].length;
-            if (accumulator.subarray(beginIndex, endIndex).reduce((a, e, idx) => a && e === gaurdsIndexesToFind[0][beginIndex + idx], true) === false) {
+            if (accumulator.subarray(beginIndex, endIndex).reduce((a, e, idx) => a && e === gaurdsIndexesToFind[0][idx], true) === false) {
                 return returnValue;
             }
             //Header Hash 1
@@ -214,36 +214,50 @@ export class Version1SortedBlocks {
             //EOP
             endIndex = beginIndex;
             beginIndex -= gaurdsIndexesToFind[1].length;
-            if (accumulator.subarray(beginIndex, endIndex).reduce((a, e, idx) => a && e === gaurdsIndexesToFind[1][beginIndex + idx], true) === false) {
+            if (accumulator.subarray(beginIndex, endIndex).reduce((a, e, idx) => a && e === gaurdsIndexesToFind[1][idx], true) === false) {
                 return returnValue;
             }
 
-            return new Version1SortedBlocks(actualPosition, rootMin, rootMax, rootBucketFactor, blockInfo, rootIndexHash, rootDataHash, rootIndexLength, rootDataLength, headerHash1, actualPosition + accumulator.length, appenOnlyStore);
+            return new Version1SortedBlocks({
+                "actualHeaderEndPoisition": actualEndPosition,
+                "keyRangeMin": rootMin,
+                "keyRangeMax": rootMax,
+                "keyBucketFactor": rootBucketFactor,
+                "blockInfo": blockInfo,
+                "indexHash": rootIndexHash,
+                "dataHash": rootDataHash,
+                "indexLength": rootIndexLength,
+                "dataLength": rootDataLength,
+                "headerHash": headerHash1,
+                "actualHeaderStart": actualStartPosition
+            }, appendOnlyStore);
         }
 
         return returnValue;
     }
 
     constructor(
-        private readonly actualHeaderEndPoisition: number,
-        public readonly KeyRangeMin: bigint,
-        public readonly KeyRangeMax: bigint,
-        private readonly keyBucketFactor: number,
-        public readonly BlockInfo: Buffer,
-        private readonly indexHash: Buffer,
-        private readonly dataHash: Buffer,
-        private readonly indexLength: number,
-        private readonly dataLength: number,
-        private readonly headerHash: Buffer,
-        private readonly actualHeaderStart: number,
-        private readonly appenOnlyStore: IAppendStore,
+        public readonly headerInfo: {
+            actualHeaderEndPoisition: number,
+            keyRangeMin: bigint,
+            keyRangeMax: bigint,
+            keyBucketFactor: number,
+            blockInfo: Buffer,
+            indexHash: Buffer,
+            dataHash: Buffer,
+            indexLength: number,
+            dataLength: number,
+            headerHash: Buffer,
+            actualHeaderStart: number
+        },
+        private readonly appendOnlyStore: IAppendStore
     ) { }
 
     public get(key: Buffer): Buffer {
         throw new Error("TBI");
     }
 
-    public *iterate(): Generator<[key: Buffer, value: Buffer]> {
+    public * iterate(): Generator<[key: Buffer, value: Buffer]> {
         throw new Error("TBI");
     }
 
