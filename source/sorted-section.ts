@@ -8,15 +8,16 @@ export class SortedSection {
     public static readonly keyWidthInBytes = 8;
     public static readonly pointerWidthInBytes = 4;
 
-    constructor(items: number, bytesPerItemValue: number) {
+    constructor(items: number, private readonly bytesPerItemValue: number) {
         this.index = Buffer.allocUnsafe(items * (SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes));
-        this.payload = Buffer.allocUnsafe(items * bytesPerItemValue);
+        this.payload = Buffer.allocUnsafe(items * this.bytesPerItemValue);
         this.indexBytePointer = this.index.length;
         this.payloadBytePointer = this.payload.length;
     }
 
-    add(key: bigint, value: Buffer): { indexPointer: number, payloadPointer: number } {
+    add(key: bigint, value: Buffer): { indexLength: number, payloadLength: number } {
         if (this.keySet.has(key)) throw new Error(`Cannot add duplicate key ${key}, it already exists.`)
+        if (value == undefined || value.length > this.bytesPerItemValue) throw new Error(`Value for key:${key} exceeds the max value size specified:${this.bytesPerItemValue}.`)
         //Index=Key(64Bit)|DataPacketOffsetFromIndexStart(32Bit)
         this.indexBytePointer -= SortedSection.keyWidthInBytes;
         this.index.writeBigInt64BE(key, this.indexBytePointer);
@@ -25,7 +26,7 @@ export class SortedSection {
         this.payloadBytePointer -= value.length;
         value.copy(this.payload, this.payloadBytePointer);
         this.keySet.add(key);
-        return { indexPointer: this.indexBytePointer, payloadPointer: this.payloadBytePointer };
+        return { indexLength: (this.payload.length - this.indexBytePointer), payloadLength: (this.payload.length - this.payloadBytePointer) };
     }
 
     toBuffer(): { index: Buffer, values: Buffer } {

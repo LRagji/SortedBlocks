@@ -110,7 +110,7 @@ describe(`sorted-section write specs`, () => {
         const content = "Hello World String";
         const blockInfo = "1526919030474-55";
         const blockInfoBuff = Buffer.from(blockInfo);
-        const numberOfSamples = 1000;
+        const numberOfSamples = 2000;
 
         const kvps = new Map<bigint, Buffer>();
         for (let idx = 0; idx < numberOfSamples; idx++) {
@@ -140,21 +140,21 @@ describe(`sorted-section write specs`, () => {
     })
 
 
-    // it('should serialize 1 million data points in acceptable time', async () => {
-    //     const numberOfValues = 1000000;
-    //     const mockStore = new MockedAppendStore();
-    //     const content = "____________This is a test content for 61 bytes._____________";
-    //     const blockInfo = "1526919030474-55";
-    //     const blockInfoBuff = Buffer.from(blockInfo);
-    //     const value = Buffer.from(content);
+    it('should serialize 1 million data points in acceptable time', async () => {
+        const numberOfValues = 1000000;
+        const mockStore = new MockedAppendStore();
+        const content = "____________This is a test content for 61 bytes._____________";
+        const blockInfo = "1526919030474-55";
+        const blockInfoBuff = Buffer.from(blockInfo);
+        const value = Buffer.from(content);
 
-    //     const payload = new Map<bigint, Buffer>();
-    //     for (let index = 0; index < numberOfValues; index++) {
-    //         payload.set(BigInt(index), value);
-    //     }
+        const payload = new Map<bigint, Buffer>();
+        for (let index = 0; index < numberOfValues; index++) {
+            payload.set(BigInt(index), value);
+        }
 
-    //     const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, payload, value.length);
-    //     assert.deepStrictEqual(bytesWritten, mockStore.store.length);
-    //     console.log(`${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
-    // }).timeout(-1)
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, payload, value.length);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+        console.log(`${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
+    }).timeout(-1)
 });

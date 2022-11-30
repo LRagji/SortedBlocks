@@ -45,8 +45,8 @@ export class Version1SortedBlocks {
             const section = sections.get(sectionKey) || new SortedSection(bucketFactor, maxValueSizeInBytes);
             //@ts-ignore
             const bytesWritten = section.add(key, payload.get(key)); //TODO:HotSpot in terms of performance.
-            maxIndexBytes = Math.max(maxIndexBytes, bytesWritten.indexPointer);
-            maxPointerBytes = Math.max(maxPointerBytes, bytesWritten.payloadPointer);
+            maxIndexBytes = Math.max(maxIndexBytes, bytesWritten.indexLength);
+            maxPointerBytes = Math.max(maxPointerBytes, bytesWritten.payloadLength);
             sections.set(sectionKey, section);
         }
         //console.timeEnd("  Sections");
