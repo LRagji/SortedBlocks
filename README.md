@@ -102,14 +102,14 @@ This is the unsecured part of the protocol which is not hashed, and so are some 
   <tr>
     <td>12</td>
     <td>Key Max</td>
-    <td>Int64BE</td>
+    <td>UInt64BE</td>
     <td>8</td>
     <td>Maximum of the key in this block</td>
   </tr>
    <tr>
     <td>12</td>
     <td>Key Min</td>
-    <td>Int64BE</td>
+    <td>UInt64BE</td>
     <td>8</td>
     <td>Minimum of the key in this block</td>
   </tr>

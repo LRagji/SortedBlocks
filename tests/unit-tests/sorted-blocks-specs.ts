@@ -11,7 +11,7 @@ const version = Buffer.alloc(1);
 const bucketFactor = 1024;
 version.writeUIntBE(1, 0, 1);
 
-describe(`sorted-section write specs`, () => {
+describe(`sorted-section specs`, () => {
 
     beforeEach(async function () {
 
@@ -138,7 +138,6 @@ describe(`sorted-section write specs`, () => {
             }
         }
     })
-
 
     it('should serialize 1 million data points in acceptable time', async () => {
         const numberOfValues = 1000000;

@@ -5,9 +5,7 @@ import { SortedSection } from './sorted-section';
 export class Version1SortedBlocks {
 
     //TODO:
-    // 0. Change algorith to start of group with mod
-    // 1. Make Keys UINT61 from Int64(helps in modding)
-    // 1.2 Change Modding algo to start of bucket
+
     // 2. Change Terminology according to google sheet document.
     // 3. Move googlee sheet to Readme as md
     // 3.5 Should we Keep IStore or ICursor impplemeentation?
@@ -22,6 +20,9 @@ export class Version1SortedBlocks {
     private static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
     private static readonly EOP = Version1SortedBlocks.magicBuffer.subarray(12, 16);
     private static readonly version = Uint8Array.from([1]);
+    private static readonly maxBigInt = BigInt("18446744073709551615");
+    private static readonly minBigInt = BigInt("0");
+
 
     public static serialize(appendOnlyStore: IAppendStore, blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
@@ -31,6 +32,8 @@ export class Version1SortedBlocks {
 
         //console.time("  Extra");
         const minKey = sortedKeys[0], maxKey = sortedKeys[sortedKeys.length - 1];
+        if (minKey < Version1SortedBlocks.minBigInt) throw new Error(`Only positive keys of 64bit values are allowed,from ${Version1SortedBlocks.minBigInt}) to ${Version1SortedBlocks.maxBigInt} [${minKey}]`);
+        if (maxKey > Version1SortedBlocks.maxBigInt) throw new Error(`Only positive keys of 64bit values are allowed,from ${Version1SortedBlocks.minBigInt}) to ${Version1SortedBlocks.maxBigInt} [${maxKey}]`);
         const bucketFactor = 1024;//TODO: We will calculate this later with some algo for a given range.
         const bucketFactorBigInt = BigInt(bucketFactor);
         //console.timeEnd("  Extra");
@@ -57,8 +60,8 @@ export class Version1SortedBlocks {
         const finalIndex = new SortedSection(sections.size, (maxIndexBytes + maxPointerBytes + indexDataLength.length));
         sections.forEach((section, sectionKey) => {
             const iResult = section.toBuffer();
-            indexDataLength.writeUInt32BE(iResult.index.length, 0);
-            indexDataLength.writeUInt32BE(iResult.values.length, 4);
+            indexDataLength.writeUint32BE(iResult.index.length, 0);
+            indexDataLength.writeUint32BE(iResult.values.length, 4);
             const sectionBuff = Buffer.concat([iResult.values, iResult.index, indexDataLength]);
             finalIndex.add(sectionKey, sectionBuff);
         });
@@ -76,9 +79,9 @@ export class Version1SortedBlocks {
         const Buffer64 = Buffer.alloc(8);
         const Buffer32 = Buffer.alloc(4);
         iheader.push(...Version1SortedBlocks.EOP);
-        Buffer64.writeBigInt64BE(minKey, 0);
+        Buffer64.writeBigUInt64BE(BigInt.asUintN(64, minKey), 0);
         iheader.push(...Buffer64);
-        Buffer64.writeBigInt64BE(maxKey, 0);
+        Buffer64.writeBigUInt64BE(BigInt.asUintN(64, maxKey), 0);
         iheader.push(...Buffer64);
         Buffer32.writeUInt32BE(bucketFactor, 0);
         iheader.push(...Buffer32);
@@ -215,11 +218,11 @@ export class Version1SortedBlocks {
             //RootMax
             endIndex = beginIndex;
             beginIndex -= 8;
-            const rootMax = accumulator.subarray(beginIndex, endIndex).readBigInt64BE();
+            const rootMax = accumulator.subarray(beginIndex, endIndex).readBigUint64BE();
             //RootMin
             endIndex = beginIndex;
             beginIndex -= 8;
-            const rootMin = accumulator.subarray(beginIndex, endIndex).readBigInt64BE();
+            const rootMin = accumulator.subarray(beginIndex, endIndex).readBigUint64BE();
             //EOP
             endIndex = beginIndex;
             beginIndex -= gaurdsIndexesToFind[1].length;
@@ -248,6 +251,7 @@ export class Version1SortedBlocks {
 
     private readonly sectionToAbsoluteOffsetPointers = new Map<bigint, number>();
     private readonly keysToValueOffset = new Map<number, Map<bigint, { absStart: number, absEnd: number }>>();
+
     constructor(
         public readonly meta: {
             actualHeaderEndPosition: number,
@@ -277,6 +281,8 @@ export class Version1SortedBlocks {
     }
 
     public get(key: bigint): Buffer | null {
+        if (key < Version1SortedBlocks.minBigInt) throw new Error(`Only positive keys of 64bit values are allowed,from ${Version1SortedBlocks.minBigInt}) to ${Version1SortedBlocks.maxBigInt} [${key}]`);
+        if (key > Version1SortedBlocks.maxBigInt) throw new Error(`Only positive keys of 64bit values are allowed,from ${Version1SortedBlocks.minBigInt}) to ${Version1SortedBlocks.maxBigInt} [${key}]`);
         if (key > this.meta.keyRangeMax || key < this.meta.keyRangeMin) {
             return null;
         }
@@ -304,7 +310,7 @@ export class Version1SortedBlocks {
             while (readOffset > 0) {
                 end = start;
                 start -= 8;
-                const sectionKey = accumulator.subarray(start, end).readBigInt64BE();
+                const sectionKey = accumulator.subarray(start, end).readBigUint64BE();
                 end = start;
                 start -= 4;
                 const relativeOffset = accumulator.subarray(start, end).readUint32BE();
@@ -349,7 +355,7 @@ export class Version1SortedBlocks {
             while (readOffset > 0) {
                 end = start;
                 start -= 8;
-                const actualKey = accumulator.subarray(start, end).readBigInt64BE();
+                const actualKey = accumulator.subarray(start, end).readBigUint64BE();
                 end = start;
                 start -= 4;
                 const relativeOffset = accumulator.subarray(start, end).readUint32BE();

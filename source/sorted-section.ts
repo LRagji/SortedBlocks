@@ -20,7 +20,7 @@ export class SortedSection {
         if (value == undefined || value.length > this.bytesPerItemValue) throw new Error(`Value for key:${key} exceeds the max value size specified:${this.bytesPerItemValue}.`)
         //Index=Key(64Bit)|DataPacketOffsetFromIndexStart(32Bit)
         this.indexBytePointer -= SortedSection.keyWidthInBytes;
-        this.index.writeBigInt64BE(key, this.indexBytePointer);
+        this.index.writeBigUint64BE(BigInt.asUintN(64, key), this.indexBytePointer);
         this.indexBytePointer -= SortedSection.pointerWidthInBytes;
         this.index.writeUInt32BE((this.payload.length - this.payloadBytePointer), this.indexBytePointer);
         this.payloadBytePointer -= value.length;
