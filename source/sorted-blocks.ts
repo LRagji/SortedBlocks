@@ -36,13 +36,16 @@ export class Version1SortedBlocks {
 
         //Sections
         //console.time("  Sections");
+        let maxIndexBytes = 0, maxPointerBytes = 0;
         const sections = new Map<bigint, SortedSection>();
         for (let index = 0; index < sortedKeys.length; index++) {
             const key = sortedKeys[index];
             const sectionKey = key - key % bucketFactorBigInt;
             const section = sections.get(sectionKey) || new SortedSection(bucketFactor, maxValueSizeInBytes);
             //@ts-ignore
-            section.add(key, payload.get(key)); //TODO:HotSpot in terms of performance.
+            const bytesWritten = section.add(key, payload.get(key)); //TODO:HotSpot in terms of performance.
+            maxIndexBytes = Math.max(maxIndexBytes, bytesWritten.indexPointer);
+            maxPointerBytes = Math.max(maxPointerBytes, bytesWritten.payloadPointer);
             sections.set(sectionKey, section);
         }
         //console.timeEnd("  Sections");
@@ -50,7 +53,7 @@ export class Version1SortedBlocks {
         //Final Index
         //console.time("  Index");
         const indexDataLength = Buffer.alloc(8);
-        const finalIndex = new SortedSection(sections.size, (maxValueSizeInBytes + SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes));
+        const finalIndex = new SortedSection(sections.size, (maxIndexBytes + maxPointerBytes));
         sections.forEach((section, sectionKey) => {
             const iResult = section.toBuffer();
             indexDataLength.writeUInt32BE(iResult.index.length, 0);

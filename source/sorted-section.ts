@@ -13,13 +13,14 @@ export class SortedSection {
         this.payload = Buffer.allocUnsafe(items * bytesPerItemValue);
     }
 
-    add(key: bigint, value: Buffer) {
+    add(key: bigint, value: Buffer): { indexPointer: number, payloadPointer: number } {
         if (this.keySet.has(key)) throw new Error(`Cannot add duplicate key ${key}, it already exists.`)
         //Index=Key(64Bit)|DataPacketOffsetFromIndexStart(32Bit)
         this.indexBytePointer = this.index.writeBigInt64BE(key, this.indexBytePointer);
         this.indexBytePointer = this.index.writeUInt32BE(this.payloadBytePointer, this.indexBytePointer);
         this.payloadBytePointer += value.copy(this.payload, this.payloadBytePointer);
         this.keySet.add(key);
+        return { indexPointer: this.indexBytePointer, payloadPointer: this.payloadBytePointer };
     }
 
     toBuffer(): { index: Buffer, values: Buffer } {
