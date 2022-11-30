@@ -15,6 +15,8 @@ export class Version1SortedBlocks {
     // 5. Think of Caching Tree in Redis
     // 6. Build a state machine to Read byte by byte and merge into API 
     // 7. Remove maxValueSizeInBytes from serialize
+    // 8. What can be done to not keep on allocating Buffers for a million time in serialize command. 74GB
+    // 9. Add validation for data hash via flag.
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
     private static readonly magicBuffer = Version1SortedBlocks.hashResolver(Buffer.from(`16111987`));
     private static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
@@ -29,7 +31,6 @@ export class Version1SortedBlocks {
 
         //console.time("  Extra");
         const minKey = sortedKeys[0], maxKey = sortedKeys[sortedKeys.length - 1];
-        const inclusiveKeyRange = (maxKey - minKey) + BigInt(1);
         const bucketFactor = 1024;//TODO: We will calculate this later with some algo for a given range.
         const bucketFactorBigInt = BigInt(bucketFactor);
         //console.timeEnd("  Extra");
@@ -53,12 +54,12 @@ export class Version1SortedBlocks {
         //Final Index
         //console.time("  Index");
         const indexDataLength = Buffer.alloc(8);
-        const finalIndex = new SortedSection(sections.size, (maxIndexBytes + maxPointerBytes));
+        const finalIndex = new SortedSection(sections.size, (maxIndexBytes + maxPointerBytes + indexDataLength.length));
         sections.forEach((section, sectionKey) => {
             const iResult = section.toBuffer();
             indexDataLength.writeUInt32BE(iResult.index.length, 0);
             indexDataLength.writeUInt32BE(iResult.values.length, 4);
-            const sectionBuff = Buffer.concat([indexDataLength, iResult.index, iResult.values]);
+            const sectionBuff = Buffer.concat([iResult.values, iResult.index, indexDataLength]);
             finalIndex.add(sectionKey, sectionBuff);
         });
         sections.clear();
@@ -333,15 +334,15 @@ export class Version1SortedBlocks {
             const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
             const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
 
-            readOffset = absoluteOffset - bytesForIndexLength - bytesForDataLength;
+            readOffset = absoluteOffset - (bytesForIndexLength + bytesForDataLength);
             data = Buffer.alloc(0);
             accumulator = Buffer.alloc(0);
-            while (readOffset <= (absoluteOffset - bytesForIndexLength - bytesForDataLength - indexLength) && data != null) {
+            while (readOffset > (absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)) && data != null) {
                 accumulator = Buffer.concat([data, accumulator]);
                 readOffset -= data.length;
                 data = this.appendOnlyStore.reverseRead(readOffset);
             }
-            accumulator = accumulator.subarray(accumulator.length - (bytesForDataLength + bytesForIndexLength + indexLength));
+            accumulator = accumulator.subarray(accumulator.length - indexLength);
             readOffset = accumulator.length;
             let start = readOffset, end = readOffset;
             let actualKeyOffsetMap = this.keysToValueOffset.get(absoluteOffset) || new Map<bigint, { absStart: number, absEnd: number }>();
@@ -356,12 +357,8 @@ export class Version1SortedBlocks {
                 readOffset = start;
             }
             const values = Array.from(actualKeyOffsetMap.values());
-            for (let index = (values.length - 1); index > 0; index--) {
-                if (index === values.length - 1) {
-                    values[index].absEnd = absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength);
-
-                }
-                values[index - 1].absEnd = values[index].absStart;
+            for (let index = values.length; index > 0; index--) {
+                values[index - 1].absEnd = index === values.length ? absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength) : values[index].absStart;
             }
             this.keysToValueOffset.set(absoluteOffset, actualKeyOffsetMap);
             kvPointer = this.keysToValueOffset.get(absoluteOffset);
@@ -376,12 +373,12 @@ export class Version1SortedBlocks {
         let readOffset = absoluteSpace.absStart;
         let data: Buffer | null = Buffer.alloc(0);
         let accumulator = Buffer.alloc(0);
-        while (readOffset <= absoluteSpace.absEnd && data != null) {
+        while (readOffset > absoluteSpace.absEnd && data != null) {
             accumulator = Buffer.concat([data, accumulator]);
             readOffset -= data.length;
             data = this.appendOnlyStore.reverseRead(readOffset);
         }
-        accumulator = accumulator.subarray(accumulator.length - (absoluteSpace.absStart = absoluteSpace.absEnd));
+        accumulator = accumulator.subarray(accumulator.length - (absoluteSpace.absStart - absoluteSpace.absEnd));
         return accumulator;
     }
 

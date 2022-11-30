@@ -11,20 +11,25 @@ export class SortedSection {
     constructor(items: number, bytesPerItemValue: number) {
         this.index = Buffer.allocUnsafe(items * (SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes));
         this.payload = Buffer.allocUnsafe(items * bytesPerItemValue);
+        this.indexBytePointer = this.index.length;
+        this.payloadBytePointer = this.payload.length;
     }
 
     add(key: bigint, value: Buffer): { indexPointer: number, payloadPointer: number } {
         if (this.keySet.has(key)) throw new Error(`Cannot add duplicate key ${key}, it already exists.`)
         //Index=Key(64Bit)|DataPacketOffsetFromIndexStart(32Bit)
-        this.indexBytePointer = this.index.writeBigInt64BE(key, this.indexBytePointer);
-        this.indexBytePointer = this.index.writeUInt32BE(this.payloadBytePointer, this.indexBytePointer);
-        this.payloadBytePointer += value.copy(this.payload, this.payloadBytePointer);
+        this.indexBytePointer -= SortedSection.keyWidthInBytes;
+        this.index.writeBigInt64BE(key, this.indexBytePointer);
+        this.indexBytePointer -= SortedSection.pointerWidthInBytes;
+        this.index.writeUInt32BE((this.payload.length - this.payloadBytePointer), this.indexBytePointer);
+        this.payloadBytePointer -= value.length;
+        value.copy(this.payload, this.payloadBytePointer);
         this.keySet.add(key);
         return { indexPointer: this.indexBytePointer, payloadPointer: this.payloadBytePointer };
     }
 
     toBuffer(): { index: Buffer, values: Buffer } {
-        const returnValue = { index: Buffer.from(this.index.subarray(0, this.indexBytePointer)), values: Buffer.from(this.payload.subarray(0, this.payloadBytePointer)) };
+        const returnValue = { index: Buffer.from(this.index.subarray(this.indexBytePointer)), values: Buffer.from(this.payload.subarray(this.payloadBytePointer)) };
         this.index = Buffer.allocUnsafe(0);
         this.payload = Buffer.allocUnsafe(0);
         this.indexBytePointer = 0;

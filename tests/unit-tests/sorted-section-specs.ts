@@ -19,13 +19,16 @@ describe(`sorted-section read specs`, () => {
         const key = BigInt(1), value = Buffer.from(content);
         target.add(key, value);
         const iResult = target.toBuffer();
-        const result = Buffer.concat([iResult.index, iResult.values]);
-        const expectedByteLength = 8 + 4 + value.length;
-        const offset = 0;
+        const result = Buffer.concat([iResult.values, iResult.index]);
+        const expectedByteLength = SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes + value.length;
+        let readingOffset = expectedByteLength;
+        const indexOffset = 0;
         assert.deepStrictEqual(expectedByteLength, result.length);
-        assert.deepStrictEqual(key, result.readBigInt64BE(0));
-        assert.deepStrictEqual(offset, result.readUInt32BE(8));
-        assert.deepStrictEqual(content, result.toString("utf8", 8 + 4));
+        readingOffset -= SortedSection.keyWidthInBytes;
+        assert.deepStrictEqual(key, result.readBigInt64BE(readingOffset));
+        readingOffset -= SortedSection.pointerWidthInBytes;
+        assert.deepStrictEqual(indexOffset, result.readUInt32BE(readingOffset));
+        assert.deepStrictEqual(value, result.subarray(0, readingOffset));
     })
 
     it('should throw if key is already presented', async () => {
@@ -45,18 +48,19 @@ describe(`sorted-section read specs`, () => {
             target.add(BigInt(index), value);
         }
         const iResult = target.toBuffer();
-        const result = Buffer.concat([iResult.index, iResult.values]);
-        const expectedByteLength = (8 + 4 + value.length) * numberOfValues;
-        let offset = 0;
-        const valueBaseOffset = numberOfValues * (8 + 4);
+        const result = Buffer.concat([iResult.values, iResult.index,]);
+        const expectedByteLength = (SortedSection.keyWidthInBytes + SortedSection.pointerWidthInBytes + value.length) * numberOfValues;
         assert.deepStrictEqual(expectedByteLength, result.length);
+
+        let keyBaseOffset = expectedByteLength;
         for (let index = 0; index < numberOfValues; index++) {
-            const keyBaseOffset = index * (8 + 4);
             const key = BigInt(index);
+            keyBaseOffset -= SortedSection.keyWidthInBytes;
             assert.deepStrictEqual(key, result.readBigInt64BE(keyBaseOffset));
-            assert.deepStrictEqual(offset, result.readUInt32BE(keyBaseOffset + 8));
-            assert.deepStrictEqual(content, result.toString("utf8", (valueBaseOffset + offset), (valueBaseOffset + offset) + content.length));
-            offset += value.length;
+            keyBaseOffset -= SortedSection.pointerWidthInBytes;
+            const valueOffset = result.readUInt32BE(keyBaseOffset);
+            const indexedOffset = result.length - (valueOffset + iResult.index.length);
+            assert.deepStrictEqual(value, result.subarray(indexedOffset - value.length, indexedOffset));
         }
-    })
+    }).timeout(-1)
 });
