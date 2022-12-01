@@ -8,9 +8,13 @@ TODO:
 3. Should switch to binary reads instead of UTF8 to support compressed file being written.
 
 ## Format
+The whole file is divided into blocks each block adheres to given below format. The concept of having multiple writters and append only is achived via blocks as each block is independent and has relative byte position internally no 2 writers can mess up the appending to the disk or cause corruption. Block are further divided into folloeing sections
 
-### 1. Preamble 
-This is the unsecured part of the protocol which is not hashed, and so are some fields repeated to avoid bit flips errors.
+1. **Preamble**: This is the start of the block and typically contains a marker called S.O.P ie: start of packet, Readers look at this specific marker to start reading.
+2. **Header**: This section is hash verified and contains important key range filters and Block information that is saved with each block.
+3. **Block Index**: Place where section pointers are located, It is equivalent to index.
+4. **Block Data**: Place where actual key and its data is parked.
+
 <table>
   <tr>
     <th>Field No</th>
@@ -102,14 +106,14 @@ This is the unsecured part of the protocol which is not hashed, and so are some 
   <tr>
     <td>12</td>
     <td>Key Max</td>
-    <td>Int64BE</td>
+    <td>UInt64BE</td>
     <td>8</td>
     <td>Maximum of the key in this block</td>
   </tr>
    <tr>
     <td>12</td>
     <td>Key Min</td>
-    <td>Int64BE</td>
+    <td>UInt64BE</td>
     <td>8</td>
     <td>Minimum of the key in this block</td>
   </tr>
@@ -120,4 +124,33 @@ This is the unsecured part of the protocol which is not hashed, and so are some 
     <td>4</td>
     <td>Magic Sequence for indicating end of a block</td>
   </tr>
+   <tr>
+    <td>14</td>
+    <td rowspan="3">Block Index</td>
+    <td>Section Index</td>
+    <td>UInt64BE</td>
+    <td>8</td>
+    <td>Found by key-(key % bucket factor), it helps in bucketing the key.</td>
+  </tr>
+   <tr>
+    <td>15</td>
+    <td>Section Offset</td>
+    <td>UInt32BE</td>
+    <td>4</td>
+    <td>A relative offset from the end of the current index, where the actuak keys for this bucket will be specified.</td>
+  </tr>
+  <tr bgcolor="green"  >
+   <td>16</td>
+   <td colspan="4">Field 14 and 15 repeats in same fashion for N sections formed by the payload keys, Total length of this index is given by field 5.</td>
+  </tr>
+   <tr>
+    <td>17</td>
+    <td rowspan="1">Block Data</td>
+    <td>Sections</td>
+    <td>BYTE[]</td>
+    <td>Given by field 6</td>
+    <td>Refer to following format for section representation bytewise.</td>
+  </tr>
 </table>
+
+## Section Data
