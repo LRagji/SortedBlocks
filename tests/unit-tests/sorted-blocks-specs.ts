@@ -1,8 +1,7 @@
 import * as assert from 'node:assert';
 import crypto from 'node:crypto';
 import { Version1SortedBlocks } from '../../source/sorted-blocks';
-import { indexOfSequence } from '../../source/';
-import { MockedAppendStore, MockedStore } from '../utilities/mock-store';
+import { MockedAppendStore, getRandomInt } from '../utilities/mock-store';
 
 const hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
 const magicBuffer = hashResolver(Buffer.from(`16111987`));
@@ -12,7 +11,7 @@ const version = Buffer.alloc(1);
 const bucketFactor = 1024;
 version.writeUIntBE(1, 0, 1);
 
-describe(`sorted-section write specs`, () => {
+describe(`sorted-section specs`, () => {
 
     beforeEach(async function () {
 
@@ -22,82 +21,128 @@ describe(`sorted-section write specs`, () => {
 
     });
 
-    it('should be doing correct data assembly', async () => {
+    it('shoud be able to deserialize data to its original form when reading single bytes from store underneath', async () => {
         const mockStore = new MockedAppendStore();
         const content = "Hello World String";
         const blockInfo = "1526919030474-55";
+        const key = BigInt(102), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
 
-        const key = BigInt(1), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-        const bytesReturned = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+        if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+        assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 172);
+        assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 50);
 
-        assert.deepStrictEqual(bytesReturned, mockStore.store.length);
-
-        let start = SOP.length * -1, end = 0;//SOP
-        assert.deepStrictEqual(mockStore.store.subarray(start), SOP);
-
-        end = start; start -= 16;//Header Hash 1
-        const headerHash1 = mockStore.store.subarray(start, end);
-
-        end = start; start -= version.length;//Version
-        assert.deepStrictEqual(mockStore.store.subarray(start, end), version);
-
-        end = start; start -= 16;//Header Hash 2
-        const headerHash2 = mockStore.store.subarray(start, end);
-        assert.deepStrictEqual(headerHash1, headerHash2);
-
-        const startIndexOfEOP = indexOfSequence(mockStore.store, EOP);
-        end = start; start = startIndexOfEOP - mockStore.store.length;//Complete Header Start
-        const hashedHeader = mockStore.store.subarray(start, end);
-        assert.deepStrictEqual(headerHash1, hashResolver(hashedHeader));
-
-        start = end; start -= 4; //Index Length
-        const indexLength = mockStore.store.subarray(start, end).readUint32BE(0);
-        end = start; start -= 4; //Data Length
-        const dataLength = mockStore.store.subarray(start, end).readUint32BE(0);
-        end = start; start -= 4; //BlockInfo Length
-        const blockInfoLength = mockStore.store.subarray(start, end).readUint32BE(0);
-        end = start; start -= blockInfoLength; //BlockInfo
-        const aBlockInfo = mockStore.store.subarray(start, end).toString();
-        assert.deepStrictEqual(aBlockInfo, blockInfo);
-        assert.deepStrictEqual(aBlockInfo.length, blockInfoLength);
-        end = start; start -= 16; //Index Hash
-        const IndexHash = mockStore.store.subarray(start, end);
-        end = start; start -= 16; //Data Length
-        const dataHash = mockStore.store.subarray(start, end);
-        end = start; start -= 4; //Bucket Factor
-        const abucketFactor = mockStore.store.subarray(start, end).readUint32BE(0);
-        assert.deepEqual(abucketFactor, bucketFactor);
-        end = start; start -= 8; //Max ID
-        const maxId = mockStore.store.subarray(start, end).readBigInt64BE(0);
-        assert.deepEqual(maxId, key);
-        end = start; start -= 8; //Min ID
-        const minId = mockStore.store.subarray(start, end).readBigInt64BE(0);
-        assert.deepEqual(minId, key);
-        end = start; start -= 4; //EOP
-        const aEOP = mockStore.store.subarray(start, end);
-        assert.deepEqual(aEOP, EOP);
-        const aIndex = mockStore.store.subarray(start - indexLength, start);//Hashed Index
-        assert.deepStrictEqual(IndexHash, hashResolver(aIndex));
-        const aData = mockStore.store.subarray((start - indexLength) - dataLength, (start - indexLength));//Hashed Data
-        assert.deepStrictEqual(dataHash, hashResolver(aData));
-        //Section Index
-
-
+        const retrivedValue = sortedBlock.get(key);
+        assert.deepStrictEqual(retrivedValue, value);
     })
 
-    // it('should throw if key is already presented', async () => {
-    //     const content = "Hello World String";
-    //     const target = new SortedSection(1, content.length);
-    //     const key = BigInt(1), value = Buffer.from(content);
-    //     target.add(key, value);
-    //     assert.throws(() => target.add(key, value), new Error(`Cannot add duplicate key ${key}, it already exists.`))
-    // })
+    it('shoud be able to deserialize data to its original form when reading random length bytes from store underneath', async () => {
+        const mockStore = new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined, true);
+        //const debugArray = [9, 5, 2, 4, 1, 1, 4, 4, 1, 5, 1, 1, 9, 6, 8, 1, 2, 9, 5, 1, 9, 2, 8, 10, 6, 9, 9, 7, 9, 2, 9, 2, 6];
+        //const mockStore = new MockedAppendStore(undefined, () => debugArray.shift() as number, undefined, false);
+        const content = "Hello World String";
+        const blockInfo = "1526919030474-55";
+        const key = BigInt(102), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
 
-    it('should be doing correct data assembly with multiple values', async () => {
-        const numberOfValues = 1000000;
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+        const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+        if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+        assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 172);
+        assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 50);
+
+        const retrivedValue = sortedBlock.get(key);
+        assert.deepStrictEqual(retrivedValue, value);
+    })
+
+    it('shoud be able to deserialize multiple data to its original form when reading single bytes from store underneath', async () => {
         const mockStore = new MockedAppendStore();
         const content = "Hello World String";
+        const blockInfo = "1526919030474-55";
+        const blockInfoBuff = Buffer.from(blockInfo);
+        const numberOfSamples = 1000;
+
+        const kvps = new Map<bigint, Buffer>();
+        for (let idx = 0; idx < numberOfSamples; idx++) {
+            kvps.set(BigInt(idx), Buffer.from(content + `${idx}.`))
+        }
+
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, kvps);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+        const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+        if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, BigInt(numberOfSamples - 1));
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, BigInt(0));
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+
+        for (let idx = 0; idx < numberOfSamples; idx++) {
+            const key = BigInt(idx);
+            const retrivedValue: Buffer | null = sortedBlock.get(key);
+            if (retrivedValue == null) {
+                assert.fail(`Value for key${idx} cannot be null`);
+            }
+            else {
+                assert.deepStrictEqual(retrivedValue, kvps.get(key));
+            }
+        }
+    })
+
+    it('shoud be able to deserialize multiple data to its original form when reading random length bytes from store underneath', async () => {
+        const mockStore = new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined, true);
+        //const debugArray = [9, 5, 2, 4, 1, 1, 4, 4, 1, 5, 1, 1, 9, 6, 8, 1, 2, 9, 5, 1, 9, 2, 8, 10, 6, 9, 9, 7, 9, 2, 9, 2, 6];
+        //const mockStore = new MockedAppendStore(undefined, () => debugArray.shift() as number, undefined, false);
+        const content = "Hello World String";
+        const blockInfo = "1526919030474-55";
+        const blockInfoBuff = Buffer.from(blockInfo);
+        const numberOfSamples = 2000;
+
+        const kvps = new Map<bigint, Buffer>();
+        for (let idx = 0; idx < numberOfSamples; idx++) {
+            kvps.set(BigInt(idx), Buffer.from(content + `${idx}.`))
+        }
+
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, kvps);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+        const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+        if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, BigInt(numberOfSamples - 1));
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, BigInt(0));
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+
+        for (let idx = 0; idx < numberOfSamples; idx++) {
+            const key = BigInt(idx);
+            const retrivedValue: Buffer | null = sortedBlock.get(key);
+            if (retrivedValue == null) {
+                assert.fail(`Value for key${idx} cannot be null`);
+            }
+            else {
+                assert.deepStrictEqual(retrivedValue, kvps.get(key));
+            }
+        }
+    })
+
+    it('should serialize 1 million data points in acceptable time', async () => {
+        const numberOfValues = 1000000;
+        const mockStore = new MockedAppendStore();
+        const content = "____________This is a test content for 61 bytes._____________";
         const blockInfo = "1526919030474-55";
         const blockInfoBuff = Buffer.from(blockInfo);
         const value = Buffer.from(content);
@@ -108,7 +153,7 @@ describe(`sorted-section write specs`, () => {
         }
 
         const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, payload, value.length);
-
-        console.log(bytesWritten);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+        console.log(`${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
     }).timeout(-1)
 });
