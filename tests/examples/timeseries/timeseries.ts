@@ -57,8 +57,22 @@ function write() {
     }
 }
 
-write();
+//==================================================================================Read==========================================================================
 
-// function read() {
-//     const filePath = "tests/examples/timeseries/data/4c197082-043f-4ee9-a2d3-3540783ea9ba/0-0.wal";
-// }
+function read() {
+    const filePath = "tests/examples/timeseries/data/4c197082-043f-4ee9-a2d3-3540783ea9ba/0-0.wal";
+    const store = new FileStore(filePath);
+    let block: null | Version1SortedBlocks = null;
+    let offset = store.size();
+    while (offset > 0) {
+        const block = Version1SortedBlocks.deserialize(store, offset);
+        if (block != null) {
+            console.log(block.meta.blockInfo.toString());
+            console.log(block.get(BigInt(200)));
+            offset = block.nextBlockOffset();
+        }
+    }
+    console.log("Reading complete");
+}
+
+read();

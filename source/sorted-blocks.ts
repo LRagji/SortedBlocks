@@ -5,7 +5,7 @@ import { SortedSection } from './sorted-section';
 export class Version1SortedBlocks {
 
     //TODO:
-
+    // 1 Next block offset is missing.
     // 2. Change Terminology according to google sheet document.
     // 3. Move googlee sheet to Readme as md
     // 3.5 Should we Keep IStore or ICursor impplemeentation?
@@ -390,5 +390,9 @@ export class Version1SortedBlocks {
 
     public * iterate(): Generator<[key: bigint, value: Buffer]> {
         throw new Error("TBI");
+    }
+
+    public nextBlockOffset(): number {
+        return this.meta.actualHeaderEndPosition - (this.meta.indexLength + this.meta.dataLength);
     }
 }

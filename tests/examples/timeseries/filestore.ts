@@ -12,22 +12,27 @@ export class FileStore implements IAppendStore {
         this.Id = filePath;
         const directory = path.dirname(filePath);
         fs.mkdirSync(directory, { recursive: true })
-        this.handle = fs.openSync(filePath, "as");
+        this.handle = fs.openSync(filePath, "as+");
         //this.writeCache = Buffer.alloc(blockSize);
         this.readCache = Buffer.alloc(blockSize);
     }
 
-    append(data: Buffer): void {
+    public append(data: Buffer): void {
         fs.writeSync(this.handle, data, 0, data.length);
     }
 
-    reverseRead(fromPosition: number): Buffer | null {
-        if (fs.readSync(this.handle, this.readCache, 0, this.readCache.length, fromPosition) > 0) {
+    public reverseRead(fromPosition: number): Buffer | null {
+        if (fs.readSync(this.handle, this.readCache, 0, this.readCache.length, fromPosition - this.readCache.length) > 0) {
             return this.readCache;
         }
         else {
             return null;
         }
+    }
+
+    public size(): number {
+        const size = fs.statSync(this.Id).size;
+        return size;
     }
 
     public close() {
