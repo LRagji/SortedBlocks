@@ -22,6 +22,18 @@
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ]
+        },
+        {
+            "type": "node",
+            "runtimeVersion": "16.15.1",
+            "request": "launch",
+            "name": "Example Timeseries",
+            "pauseForSourceMap": true,
+            "program": "${workspaceFolder}/tests/examples/timeseries/dist/tests/examples/timeseries/timeseries.js",
+            "preLaunchTask": "tsc: build - tests/examples/timeseries/tsconfig.json",
+            // "outFiles": [
+            //     "${workspaceFolder}/tests/examples/timeseries/dist/**/*.mjs"
+            // ]
         }
     ]
 }

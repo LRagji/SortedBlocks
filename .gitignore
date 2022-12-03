@@ -108,3 +108,5 @@ dist
 /dist
 
 .DS_Store
+
+data
