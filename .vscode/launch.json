@@ -29,11 +29,11 @@
             "request": "launch",
             "name": "Example Timeseries",
             "pauseForSourceMap": true,
-            "program": "${workspaceFolder}/tests/examples/timeseries/dist/tests/examples/timeseries/timeseries.js",
+            "program": "${workspaceFolder}/tests/examples/timeseries/timeseries.ts",
             "preLaunchTask": "tsc: build - tests/examples/timeseries/tsconfig.json",
-            // "outFiles": [
-            //     "${workspaceFolder}/tests/examples/timeseries/dist/**/*.mjs"
-            // ]
+            "outFiles": [
+                "${workspaceFolder}/tests/examples/timeseries/dist/**/*.js"
+            ]
         }
     ]
 }

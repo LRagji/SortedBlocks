@@ -8,6 +8,9 @@ export class FileStore implements IAppendStore {
     //private readonly writeCache = Buffer.alloc(1024);
     private readonly readCache = Buffer.alloc(1024);
 
+    //Stats
+    private readonly readOPS = new Map<number, number>();
+
     constructor(filePath: string, blockSize: number = 1024) {
         this.Id = filePath;
         const directory = path.dirname(filePath);
@@ -22,6 +25,12 @@ export class FileStore implements IAppendStore {
     }
 
     public reverseRead(fromPosition: number): Buffer | null {
+        const operationTimestamp = Date.now();
+        const operationBucket = operationTimestamp - (operationTimestamp % 1000);
+        let ops = this.readOPS.get(operationBucket) || 0;
+        ops++;
+        this.readOPS.set(operationBucket, ops);
+        this.readOPS.delete(operationBucket - 15000);
         if (fs.readSync(this.handle, this.readCache, 0, this.readCache.length, fromPosition - this.readCache.length) > 0) {
             return this.readCache;
         }
@@ -37,5 +46,9 @@ export class FileStore implements IAppendStore {
 
     public close() {
         fs.closeSync(this.handle);
+    }
+
+    public statistics(): { readOps: Map<number, number> } {
+        return { readOps: this.readOPS };
     }
 }

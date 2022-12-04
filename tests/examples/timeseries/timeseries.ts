@@ -60,19 +60,41 @@ function write() {
 //==================================================================================Read==========================================================================
 
 function read() {
+    const st = Date.now();
     const filePath = "tests/examples/timeseries/data/4c197082-043f-4ee9-a2d3-3540783ea9ba/0-0.wal";
-    const store = new FileStore(filePath);
-    let block: null | Version1SortedBlocks = null;
+    const store = new FileStore(filePath, 4096);
+    //let block: null | Version1SortedBlocks = null;
+    let blockCounter = 0;
     let offset = store.size();
     while (offset > 0) {
         const block = Version1SortedBlocks.deserialize(store, offset);
         if (block != null) {
-            console.log(block.meta.blockInfo.toString());
-            console.log(block.get(BigInt(200)));
+            const tagId = BigInt(200);
+            const info = block.meta.blockInfo.toString();
+            const serializedSample = block.get(tagId);
+            if (serializedSample == null) {
+                throw new Error(`${info}: Key cannot be null`);
+            }
+            // const q2 = serializedSample.readBigUInt64BE(24);
+            // const q1 = serializedSample.readBigUInt64BE(16);
+            // const value = serializedSample.readDoubleBE(8);
+            // const time = serializedSample.readBigUInt64BE(0);
+            // if (q1 !== tagId) throw new Error(`${info}: Quality Error 1`);
+            // if (q2 !== q1) throw new Error(`${info}: Quality Error 2`);
+            // if (value !== (12 + 0.5)) throw new Error(`${info}: Value Error`);
             offset = block.nextBlockOffset();
+            blockCounter++;
         }
     }
-    console.log("Reading complete");
+    const elapsed = Date.now() - st;
+    const stats = store.statistics();
+    const readStats = Array.from(stats.readOps.values()).reduce((acc, e) => {
+        acc.max = Math.max(acc.max, e);
+        acc.min = Math.min(acc.min, e);
+        acc.sum = acc.sum + e;
+        return acc;
+    }, { min: Number.MAX_SAFE_INTEGER, max: Number.MIN_SAFE_INTEGER, sum: 0 });
+    console.log(`Reading completed with ${blockCounter} blocks within ${elapsed}ms with OPS: Total:${readStats.sum} Max:${readStats.max} Min:${readStats.min} Avg:${(readStats.sum / stats.readOps.size).toFixed(2)} `);
 }
 
 read();
