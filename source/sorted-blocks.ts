@@ -301,7 +301,7 @@ export class Version1SortedBlocks {
         }
     }
 
-    private readonly sectionToAbsoluteOffsetPointers = new Map<bigint, number>();
+    private readonly sectionToAbsoluteByteOffsetPointers = new Map<bigint, number>();
     private readonly keysToValueOffset = new Map<number, Map<bigint, { absStart: number, absEnd: number }>>();
 
     constructor(
@@ -340,10 +340,7 @@ export class Version1SortedBlocks {
             return null;
         }
         const keySection = key - key % this.meta.keyBucketFactor;
-        if (this.sectionToAbsoluteOffsetPointers.size > 0 && !this.sectionToAbsoluteOffsetPointers.has(keySection)) {
-            return null;
-        }
-        if (this.sectionToAbsoluteOffsetPointers.size === 0) {
+        if (this.sectionToAbsoluteByteOffsetPointers.size === 0) {
             //Fill the map
             const accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength);
             const computedHash = Version1SortedBlocks.hashResolver(accumulator);
@@ -360,26 +357,29 @@ export class Version1SortedBlocks {
                 start -= 4;
                 const relativeOffset = accumulator.subarray(start, end).readUint32BE();
                 const absoluteOffset = this.meta.actualHeaderEndPosition - (this.meta.indexLength + relativeOffset);
-                this.sectionToAbsoluteOffsetPointers.set(sectionKey, absoluteOffset);
+                this.sectionToAbsoluteByteOffsetPointers.set(sectionKey, absoluteOffset);
                 readOffset = start;
             }
         }
-        const absoluteOffset = this.sectionToAbsoluteOffsetPointers.get(keySection);
-        if (absoluteOffset == undefined) {
+        if (!this.sectionToAbsoluteByteOffsetPointers.has(keySection)) {
             return null;
         }
-        //This means we have the section key
-        let kvPointer = this.keysToValueOffset.get(absoluteOffset);
+        const absoluteByteOffset = this.sectionToAbsoluteByteOffsetPointers.get(keySection);
+        if (absoluteByteOffset == undefined) {
+            return null;
+        }
+        //Fill map if required
+        let kvPointer = this.keysToValueOffset.get(absoluteByteOffset);
         if (kvPointer == undefined) {
             //Read from the disk
             const bytesForIndexLength = 4, bytesForDataLength = 4;
-            let accumulator = this.efficientReversedRead(absoluteOffset, (absoluteOffset - (bytesForIndexLength + bytesForDataLength)));
+            let accumulator = this.efficientReversedRead(absoluteByteOffset, (absoluteByteOffset - (bytesForIndexLength + bytesForDataLength)));
             const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
             const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
-            accumulator = this.efficientReversedRead(absoluteOffset - (bytesForIndexLength + bytesForDataLength), (absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)));
+            accumulator = this.efficientReversedRead(absoluteByteOffset - (bytesForIndexLength + bytesForDataLength), (absoluteByteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)));
             let readOffset = accumulator.length;
             let start = readOffset, end = readOffset;
-            let actualKeyOffsetMap = this.keysToValueOffset.get(absoluteOffset) || new Map<bigint, { absStart: number, absEnd: number }>();
+            let actualKeyOffsetMap = this.keysToValueOffset.get(absoluteByteOffset) || new Map<bigint, { absStart: number, absEnd: number }>();
             while (readOffset > 0) {
                 end = start;
                 start -= 8;
@@ -387,18 +387,19 @@ export class Version1SortedBlocks {
                 end = start;
                 start -= 4;
                 const relativeOffset = accumulator.subarray(start, end).readUint32BE();
-                actualKeyOffsetMap.set(actualKey, { absStart: (absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: 0 });
+                actualKeyOffsetMap.set(actualKey, { absStart: (absoluteByteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: 0 });
                 readOffset = start;
             }
             const values = Array.from(actualKeyOffsetMap.values());
             for (let index = values.length; index > 0; index--) {
-                values[index - 1].absEnd = index === values.length ? absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength) : values[index].absStart;
+                values[index - 1].absEnd = index === values.length ? absoluteByteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength) : values[index].absStart;
             }
-            this.keysToValueOffset.set(absoluteOffset, actualKeyOffsetMap);
-            kvPointer = this.keysToValueOffset.get(absoluteOffset);
+            this.keysToValueOffset.set(absoluteByteOffset, actualKeyOffsetMap);
         }
+
+        kvPointer = this.keysToValueOffset.get(absoluteByteOffset);
         if (kvPointer == undefined) {
-            throw new Error(`Data Integrity check failed!, section ${absoluteOffset} returnign empty list, run full block data integrity check.`)
+            throw new Error(`Data Integrity check failed!, section ${absoluteByteOffset} returned empty list, run full block data integrity check.`)
         }
         const absoluteSpace = kvPointer.get(key);
         if (absoluteSpace == undefined) {
