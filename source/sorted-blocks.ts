@@ -302,7 +302,6 @@ export class Version1SortedBlocks {
     }
 
     public IndexIntegrityPassed: boolean = false;
-    private readonly sections = new Map<number, Map<bigint, { absStart: number, absEnd: number }>>();
     private memoryCache = new Map<string, Buffer>();
 
     constructor(
@@ -341,78 +340,15 @@ export class Version1SortedBlocks {
             return null;
         }
         const keySection = key - key % this.meta.keyBucketFactor;
-        let sectionOffset: number | undefined = undefined;
+        let sectionOffset = this.getSectionOffset(keySection);
 
-        //Fill the map
-        let accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, true);
-        if (this.IndexIntegrityPassed === false) {
-            const computedHash = Version1SortedBlocks.hashResolver(accumulator);
-            this.IndexIntegrityPassed = this.meta.indexHash.reduce((a, e, idx) => a && e === computedHash[idx], true);
-            if (this.IndexIntegrityPassed === false) {
-                throw new Error(`Data Integrity check failed! Index hash do not match actual:${this.meta.indexHash} expected:${computedHash}}.`);
+        if (sectionOffset != null) {
+            const valuePointer = this.getValuePointer(sectionOffset, key);
+            if (valuePointer != null) {
+                return this.efficientReversedRead(valuePointer.absStart, valuePointer.absEnd);
             }
         }
-        let readOffset = accumulator.length;
-        let start = readOffset, end = readOffset;
-        while (readOffset > 0) {
-            end = start;
-            start -= 8;
-            const sectionKey = accumulator.subarray(start, end).readBigUint64BE();
-            end = start;
-            start -= 4;
-            const relativeOffset = accumulator.subarray(start, end).readUint32BE();
-            const absoluteOffset = this.meta.actualHeaderEndPosition - (this.meta.indexLength + relativeOffset);
-            if (sectionKey === keySection) {
-                sectionOffset = absoluteOffset;
-                break;
-            }
-            readOffset = start;
-        }
-
-        if (sectionOffset == null) {
-            return null;
-        }
-
-        //Fill map if required
-        let kvPointer = this.sections.get(sectionOffset);
-        if (kvPointer == undefined) {
-            //Read from the disk
-            const bytesForIndexLength = 4, bytesForDataLength = 4;
-            let accumulator = this.efficientReversedRead(sectionOffset, (sectionOffset - (bytesForIndexLength + bytesForDataLength)));
-            const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
-            const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
-            accumulator = this.efficientReversedRead(sectionOffset - (bytesForIndexLength + bytesForDataLength), (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength)));
-            let readOffset = accumulator.length;
-            let start = readOffset, end = readOffset;
-            let actualKeyOffsetMap = this.sections.get(sectionOffset) || new Map<bigint, { absStart: number, absEnd: number }>();
-            while (readOffset > 0) {
-                end = start;
-                start -= 8;
-                const actualKey = accumulator.subarray(start, end).readBigUint64BE();
-                end = start;
-                start -= 4;
-                const relativeOffset = accumulator.subarray(start, end).readUint32BE();
-                actualKeyOffsetMap.set(actualKey, { absStart: (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: 0 });
-                readOffset = start;
-            }
-            const values = Array.from(actualKeyOffsetMap.values());
-            for (let index = values.length; index > 0; index--) {
-                values[index - 1].absEnd = index === values.length ? sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength) : values[index].absStart;
-            }
-            this.sections.set(sectionOffset, actualKeyOffsetMap);
-            kvPointer = this.sections.get(sectionOffset);
-        }
-
-        if (kvPointer == undefined) {
-            throw new Error(`Data Integrity check failed!, section ${sectionOffset} returned empty list, run full block data integrity check.`)
-        }
-
-        const absoluteSpace = kvPointer.get(key);
-        if (absoluteSpace == undefined) {
-            return null;
-        }
-        accumulator = this.efficientReversedRead(absoluteSpace.absStart, absoluteSpace.absEnd);
-        return accumulator;
+        return null;
     }
 
     public * iterate(): Generator<[key: bigint, value: Buffer]> {
@@ -438,5 +374,67 @@ export class Version1SortedBlocks {
             this.memoryCache.set(cacheKey, Buffer.from(returnValue));
         }
         return returnValue
+    }
+
+    private getSectionOffset(sectionStart: bigint): number | undefined {
+        let sectionOffset: number | undefined = undefined;
+        let accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, true);
+        if (this.IndexIntegrityPassed === false) {
+            const computedHash = Version1SortedBlocks.hashResolver(accumulator);
+            this.IndexIntegrityPassed = this.meta.indexHash.reduce((a, e, idx) => a && e === computedHash[idx], true);
+            if (this.IndexIntegrityPassed === false) {
+                throw new Error(`Data Integrity check failed! Index hash do not match actual:${this.meta.indexHash} expected:${computedHash}}.`);
+            }
+        }
+        let readOffset = accumulator.length;
+        let start = readOffset, end = readOffset;
+        while (readOffset > 0) {
+            end = start;
+            start -= 8;
+            const sectionKey = accumulator.subarray(start, end).readBigUint64BE();
+            end = start;
+            start -= 4;
+            const relativeOffset = accumulator.subarray(start, end).readUint32BE();
+            const absoluteOffset = this.meta.actualHeaderEndPosition - (this.meta.indexLength + relativeOffset);
+            if (sectionKey === sectionStart) {
+                sectionOffset = absoluteOffset;
+                break;
+            }
+            readOffset = start;
+        }
+        return sectionOffset;
+    }
+
+    private getValuePointer(sectionOffset: number, key: bigint): { absStart: number, absEnd: number } | null {
+        const bytesForIndexLength = 4, bytesForDataLength = 4;
+        let accumulator = this.efficientReversedRead(sectionOffset, (sectionOffset - (bytesForIndexLength + bytesForDataLength)), true);
+        const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
+        const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
+        accumulator = this.efficientReversedRead(sectionOffset - (bytesForIndexLength + bytesForDataLength), (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), true);
+        let readOffset = accumulator.length;
+        let start = readOffset, end = readOffset;
+        let valuePointer: { absStart: number, absEnd: number } | null = null;
+        while (readOffset > 0) {
+            end = start;
+            start -= 8;
+            const actualKey = accumulator.subarray(start, end).readBigUint64BE();
+            end = start;
+            start -= 4;
+            const relativeOffset = accumulator.subarray(start, end).readUint32BE();
+            if (valuePointer == null) {
+                if (actualKey === key) {
+                    valuePointer = { absStart: (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: -1 };
+                }
+            }
+            else if (valuePointer.absEnd === -1) {
+                valuePointer.absEnd = (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset));
+                break;
+            }
+            readOffset = start;
+        }
+        if (valuePointer !== null && valuePointer.absEnd === -1) {
+            valuePointer.absEnd = sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength);
+        }
+        return valuePointer;
     }
 }
