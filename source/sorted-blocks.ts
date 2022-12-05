@@ -15,6 +15,8 @@ export class Version1SortedBlocks {
     // 7. Remove maxValueSizeInBytes from serialize
     // 8. What can be done to not keep on allocating Buffers for a million time in serialize command. 74GB
     // 9. Add validation for data hash via flag.
+    //10. reduce readiops from 9k in get.
+    //11. Add option to validate entire data.
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
     private static readonly magicBuffer = Version1SortedBlocks.hashResolver(Buffer.from(`16111987`));
     private static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
@@ -293,7 +295,10 @@ export class Version1SortedBlocks {
                 }
             }
         }
-        Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));;
+        if (mergedBlock.size > 0) {
+            Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));
+            mergedBlock.clear();
+        }
     }
 
     private readonly sectionToAbsoluteOffsetPointers = new Map<bigint, number>();
@@ -340,20 +345,12 @@ export class Version1SortedBlocks {
         }
         if (this.sectionToAbsoluteOffsetPointers.size === 0) {
             //Fill the map
-            let readOffset = this.meta.actualHeaderEndPosition;
-            let accumulator = Buffer.alloc(0);
-            let data: Buffer | null = Buffer.alloc(0);
-            while (readOffset > (this.meta.actualHeaderEndPosition - this.meta.indexLength) && data != null) {
-                accumulator = Buffer.concat([data, accumulator]);
-                readOffset -= data.length;
-                data = this.appendOnlyStore.reverseRead(readOffset);
-            }
-            accumulator = accumulator.subarray(accumulator.length - this.meta.indexLength);
+            const accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength);
             const computedHash = Version1SortedBlocks.hashResolver(accumulator);
             if (this.meta.indexHash.reduce((a, e, idx) => a && e === computedHash[idx], true) === false) {
                 throw new Error(`Data Integrity check failed! Index hash do not match actual:${this.meta.indexHash} expected:${computedHash}}.`);
             }
-            readOffset = accumulator.length;
+            let readOffset = accumulator.length;
             let start = readOffset, end = readOffset;
             while (readOffset > 0) {
                 end = start;
@@ -376,28 +373,11 @@ export class Version1SortedBlocks {
         if (kvPointer == undefined) {
             //Read from the disk
             const bytesForIndexLength = 4, bytesForDataLength = 4;
-            let readOffset = absoluteOffset;
-            let accumulator = Buffer.alloc(0);
-            let data: Buffer | null = Buffer.alloc(0);
-            while (readOffset > (absoluteOffset - (bytesForIndexLength + bytesForDataLength)) && data != null) {
-                accumulator = Buffer.concat([data, accumulator]);
-                readOffset -= data.length;
-                data = this.appendOnlyStore.reverseRead(readOffset);
-            }
-            accumulator = accumulator.subarray(accumulator.length - (bytesForDataLength + bytesForIndexLength));
+            let accumulator = this.efficientReversedRead(absoluteOffset, (absoluteOffset - (bytesForIndexLength + bytesForDataLength)));
             const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
             const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
-
-            readOffset = absoluteOffset - (bytesForIndexLength + bytesForDataLength);
-            data = Buffer.alloc(0);
-            accumulator = Buffer.alloc(0);
-            while (readOffset > (absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)) && data != null) {
-                accumulator = Buffer.concat([data, accumulator]);
-                readOffset -= data.length;
-                data = this.appendOnlyStore.reverseRead(readOffset);
-            }
-            accumulator = accumulator.subarray(accumulator.length - indexLength);
-            readOffset = accumulator.length;
+            accumulator = this.efficientReversedRead(absoluteOffset - (bytesForIndexLength + bytesForDataLength), (absoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)));
+            let readOffset = accumulator.length;
             let start = readOffset, end = readOffset;
             let actualKeyOffsetMap = this.keysToValueOffset.get(absoluteOffset) || new Map<bigint, { absStart: number, absEnd: number }>();
             while (readOffset > 0) {
@@ -424,19 +404,23 @@ export class Version1SortedBlocks {
         if (absoluteSpace == undefined) {
             return null;
         }
-        let readOffset = absoluteSpace.absStart;
-        let data: Buffer | null = Buffer.alloc(0);
-        let accumulator = Buffer.alloc(0);
-        while (readOffset > absoluteSpace.absEnd && data != null) {
-            accumulator = Buffer.concat([data, accumulator]);
-            readOffset -= data.length;
-            data = this.appendOnlyStore.reverseRead(readOffset);
-        }
-        accumulator = accumulator.subarray(accumulator.length - (absoluteSpace.absStart - absoluteSpace.absEnd));
+        const accumulator = this.efficientReversedRead(absoluteSpace.absStart, absoluteSpace.absEnd);
         return accumulator;
     }
 
     public * iterate(): Generator<[key: bigint, value: Buffer]> {
         throw new Error("TBI");
+    }
+
+    private efficientReversedRead(fromPosition: number, tillPosition: number): Buffer {
+        let accumulator = Buffer.alloc(0);
+        let data: Buffer | null = Buffer.alloc(0);
+        let startPosition = fromPosition;
+        while (startPosition > tillPosition && data != null) {
+            accumulator = Buffer.concat([data, accumulator]);
+            startPosition -= data.length;
+            data = this.appendOnlyStore.reverseRead(startPosition);
+        }
+        return accumulator.subarray(accumulator.length - (fromPosition - tillPosition));
     }
 }
