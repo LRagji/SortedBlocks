@@ -56,14 +56,14 @@ The whole file is divided into blocks each block adheres to given below format. 
   <tr>
     <td>5</td>
     <td rowspan="10">Header</td>
-    <td>Root Index Length</td>
+    <td>Block Index Length</td>
     <td>UInt32BE</td>
     <td>4</td>
     <td>Length of the root index</td>
   </tr>
   <tr>
     <td>6</td>
-    <td>Root Data Length</td>
+    <td>Block Data Length</td>
     <td>UInt32BE</td>
     <td>4</td>
     <td>Length of the root data</td>
@@ -84,14 +84,14 @@ The whole file is divided into blocks each block adheres to given below format. 
   </tr>
   <tr>
     <td>9</td>
-    <td>Root Index Hash</td>
+    <td>Block Index Hash</td>
     <td>Byte[]</td>
     <td>16</td>
-    <td>MD5 of the Root Index section</td>
+    <td>MD5 of the Block Index section</td>
   </tr>
   <tr>
     <td>10</td>
-    <td>Root Data Hash</td>
+    <td>Block Data Hash</td>
     <td>Byte[]</td>
     <td>16</td>
     <td>MD5 of the Root Data section</td>
