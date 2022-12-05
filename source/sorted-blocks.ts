@@ -242,11 +242,58 @@ export class Version1SortedBlocks {
                 "indexLength": rootIndexLength,
                 "dataLength": rootDataLength,
                 "headerHash": headerHash1,
-                "storeId": appendOnlyStore.Id
+                "storeId": appendOnlyStore.Id,
+                "nextBlockOffset": actualEndPosition - (rootIndexLength + rootDataLength)
             }, appendOnlyStore);
         }
 
         return returnValue;
+    }
+
+    public static defrag(source: IAppendStore, sourceOffset: number, destination: IAppendStore,
+        purgeCallback = (mergedBlocks: Map<bigint, Buffer>) => false,
+        valueReduce = (reducedValue: Buffer | null, value: Buffer | null, blockInfo: Buffer | null): Buffer | null => null,
+        blockInfoReduce = (mergedBlockinfo: Buffer, newblockInfo: Buffer) => Buffer.alloc(0)) {
+        const blocks = new Array<Version1SortedBlocks>();
+        let mergedBlockInfo = Buffer.alloc(0);
+        while (sourceOffset > 0) {
+            const block = Version1SortedBlocks.deserialize(source, sourceOffset);
+            if (block != null) {
+                blocks.push(block);
+                sourceOffset = block.meta.nextBlockOffset;
+                mergedBlockInfo = blockInfoReduce(mergedBlockInfo, block.meta.blockInfo);
+            }
+        }
+
+        const processedKeys = new Set<bigint>();
+        const mergedBlock = new Map<bigint, Buffer>();
+        while (blocks.length > 0) {
+            const block = blocks.pop();
+            if (block != undefined) {
+                const iterator = block.iterate();
+                let kvp = iterator.next();
+                while (!kvp.done) {
+                    const key = kvp.value[0];
+                    const value = kvp.value[1];
+                    let mergedValue = blocks
+                        .map(b => b.get(key))
+                        .reduce((acc, e) => valueReduce(acc, e, block.meta.blockInfo), value);
+                    if (mergedBlock.has(key) === true) {
+                        mergedValue = valueReduce(mergedValue, mergedBlock.get(key) || null, null);
+                    }
+                    if (mergedValue != null) {
+                        mergedBlock.set(key, mergedValue);
+                    }
+                    processedKeys.add(key);
+                    if (purgeCallback(mergedBlock) === true) {
+                        Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));
+                        mergedBlock.clear();
+                    }
+                    kvp = iterator.next();
+                }
+            }
+        }
+        Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));;
     }
 
     private readonly sectionToAbsoluteOffsetPointers = new Map<bigint, number>();
@@ -265,7 +312,8 @@ export class Version1SortedBlocks {
             dataLength: number,
             headerHash: Buffer,
             actualHeaderStartPosition: number,
-            storeId: string
+            storeId: string,
+            nextBlockOffset: number
         },
         private readonly appendOnlyStore: IAppendStore
     ) {
@@ -390,9 +438,5 @@ export class Version1SortedBlocks {
 
     public * iterate(): Generator<[key: bigint, value: Buffer]> {
         throw new Error("TBI");
-    }
-
-    public nextBlockOffset(): number {
-        return this.meta.actualHeaderEndPosition - (this.meta.indexLength + this.meta.dataLength);
     }
 }

@@ -82,7 +82,7 @@ function read() {
             // if (q1 !== tagId) throw new Error(`${info}: Quality Error 1`);
             // if (q2 !== q1) throw new Error(`${info}: Quality Error 2`);
             // if (value !== (12 + 0.5)) throw new Error(`${info}: Value Error`);
-            offset = block.nextBlockOffset();
+            offset = block.meta.nextBlockOffset;
             blockCounter++;
         }
     }
