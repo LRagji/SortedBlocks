@@ -141,8 +141,8 @@ export class Version1SortedBlocks {
                             data = Buffer.alloc(0);
                         }
                         else if (state === 1) {
-                            accumulator = accumulator.subarray(indexOfFirstByte);
                             actualEndPosition = offset - (data.length - indexOfFirstByte);
+                            accumulator = accumulator.subarray(indexOfFirstByte, (indexOfFirstByte + (actualStartPosition - actualEndPosition)) - 1);
                         }
                         indexOfFirstByte = -1;
                         state++;

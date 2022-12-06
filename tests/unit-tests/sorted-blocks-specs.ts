@@ -8,7 +8,7 @@ const magicBuffer = hashResolver(Buffer.from(`16111987`));
 const SOP = magicBuffer.subarray(0, 4);;
 const EOP = magicBuffer.subarray(12, 16);
 const version = Buffer.alloc(1);
-const bucketFactor = 1024;
+const bucketFactor = BigInt(1024);
 version.writeUIntBE(1, 0, 1);
 const modes: Array<{ name: string, context: { store: MockedAppendStore } }> = [
     { name: "Read Single Byte", context: { store: new MockedAppendStore() } },
@@ -52,14 +52,58 @@ while (modes.length > 0) {
             assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
             assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
             assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
-            assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+            assert.strictEqual(sortedBlock.meta.keyBucketFactor, bucketFactor);
             assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
 
             const retrivedValue = sortedBlock.get(key);
             assert.deepStrictEqual(retrivedValue, value);
         })
 
-        it('shoud be able to deserialize single kvp data to its original form', async () => {
+        it('shoud be able to read null when key doesnt exists', async () => {
+            const mockStore = mode.context.store;
+            const content = "Hello World String";
+            const blockInfo = "1526919030474-55";
+            const key = BigInt(102), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
+
+            const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+            assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+            if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+
+            let retrivedValue = sortedBlock.get(BigInt(10));
+            assert.deepStrictEqual(retrivedValue, null);
+
+            retrivedValue = sortedBlock.get(BigInt(4849244555433));
+            assert.deepStrictEqual(retrivedValue, null);
+        })
+
+        it('shoud be able to serialize same key in different blocks and deserialize both', async () => {
+            const mockStore = mode.context.store;
+            const content = "Hello World String";
+            const key = BigInt(102), value = Buffer.from(content), blocks = [Buffer.from("Block1"), Buffer.from("Block2")];
+
+            const bytesWritten = blocks.reduce((acc, b) => {
+                return acc + Version1SortedBlocks.serialize(mockStore, b, new Map<bigint, Buffer>([[key, value]]), value.length);
+            }, 0);
+            assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+            let scanFrom = mockStore.store.length;
+            blocks.reverse().forEach((expectedBlockInfo, idx) => {
+                let sortedBlock = Version1SortedBlocks.deserialize(mockStore, scanFrom);
+                if (sortedBlock == null) assert.fail(`SortedBlock cannot be null for index:${idx}`);
+                assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+                assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
+                assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
+                assert.strictEqual(sortedBlock.meta.keyBucketFactor, bucketFactor);
+                assert.deepEqual(sortedBlock.meta.blockInfo, expectedBlockInfo);
+                scanFrom = sortedBlock.meta.nextBlockOffset;
+                const retrivedValue = sortedBlock.get(key);
+                assert.deepStrictEqual(retrivedValue, value);
+            });
+        })
+
+        it('shoud be able to serialize/deserialize single kvp data to its original form', async () => {
             const mockStore = mode.context.store;
             const content = "Hello World String";
             const blockInfo = "1526919030474-55";
@@ -73,7 +117,7 @@ while (modes.length > 0) {
             assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
             assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
             assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
-            assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+            assert.strictEqual(sortedBlock.meta.keyBucketFactor, bucketFactor);
             assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
             assert.strictEqual(sortedBlock.meta.actualHeaderStartPosition, 172);
             assert.strictEqual(sortedBlock.meta.actualHeaderEndPosition, 50);
@@ -82,7 +126,7 @@ while (modes.length > 0) {
             assert.deepStrictEqual(retrivedValue, value);
         })
 
-        it('shoud be able to deserialize multiple kvp data to its original form ', async () => {
+        it('shoud be able to serialize/deserialize multiple kvp data to its original form ', async () => {
             const mockStore = mode.context.store;
             const content = "Hello World String";
             const blockInfo = "1526919030474-55";
@@ -101,7 +145,7 @@ while (modes.length > 0) {
             assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
             assert.strictEqual(sortedBlock.meta.keyRangeMax, BigInt(numberOfSamples - 1));
             assert.strictEqual(sortedBlock.meta.keyRangeMin, BigInt(0));
-            assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+            assert.strictEqual(sortedBlock.meta.keyBucketFactor, bucketFactor);
             assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
 
             for (let idx = 0; idx < numberOfSamples; idx++) {
@@ -133,24 +177,5 @@ while (modes.length > 0) {
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
             console.log(`${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
         }).timeout(-1)
-
-        it('shoud be able to read null when key doesnt exists', async () => {
-            const mockStore = mode.context.store;
-            const content = "Hello World String";
-            const blockInfo = "1526919030474-55";
-            const key = BigInt(102), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
-
-            const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
-            assert.deepStrictEqual(bytesWritten, mockStore.store.length);
-
-            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
-            if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
-
-            let retrivedValue = sortedBlock.get(BigInt(10));
-            assert.deepStrictEqual(retrivedValue, null);
-
-            retrivedValue = sortedBlock.get(BigInt(4849244555433));
-            assert.deepStrictEqual(retrivedValue, null);
-        })
     });
 }
