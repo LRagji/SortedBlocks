@@ -302,6 +302,7 @@ export class Version1SortedBlocks {
     }
 
     public IndexIntegrityPassed: boolean = false;
+    public DataIntegrityPassed: boolean = false;
     private memoryCache = new Map<string, Buffer>();
 
     constructor(
@@ -340,8 +341,19 @@ export class Version1SortedBlocks {
             return null;
         }
         const keySection = key - key % this.meta.keyBucketFactor;
-        let sectionOffset = this.getSectionOffset(keySection);
 
+        //Find the belonging section.
+        let sectionOffset: number | null = null;
+        const iter = this.sections();
+        let cursor = iter.next();
+        while (!cursor.done) {
+            if (cursor.value[0] === keySection) {
+                sectionOffset = cursor.value[1];
+                break;
+            }
+            cursor = iter.next();
+        }
+        //Find the key in that section
         if (sectionOffset != null) {
             const valuePointer = this.getValuePointer(sectionOffset, key);
             if (valuePointer != null) {
@@ -376,7 +388,7 @@ export class Version1SortedBlocks {
         return returnValue
     }
 
-    private getSectionOffset(sectionStart: bigint): number | undefined {
+    private * sections(): Generator<[key: bigint, absoluteOffset: number]> {
         let sectionOffset: number | undefined = undefined;
         let accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, true);
         if (this.IndexIntegrityPassed === false) {
@@ -396,13 +408,14 @@ export class Version1SortedBlocks {
             start -= 4;
             const relativeOffset = accumulator.subarray(start, end).readUint32BE();
             const absoluteOffset = this.meta.actualHeaderEndPosition - (this.meta.indexLength + relativeOffset);
-            if (sectionKey === sectionStart) {
-                sectionOffset = absoluteOffset;
-                break;
-            }
+            yield [sectionKey, absoluteOffset];
+            // if (sectionKey === sectionStart) {
+            //     sectionOffset = absoluteOffset;
+            //     break;
+            // }
             readOffset = start;
         }
-        return sectionOffset;
+        //return sectionOffset;
     }
 
     private getValuePointer(sectionOffset: number, key: bigint): { absStart: number, absEnd: number } | null {

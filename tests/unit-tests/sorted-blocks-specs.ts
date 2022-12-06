@@ -156,4 +156,23 @@ describe(`sorted-section specs`, () => {
         assert.deepStrictEqual(bytesWritten, mockStore.store.length);
         console.log(`${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
     }).timeout(-1)
+
+    it('shoud be able to read null when key doesnt exists', async () => {
+        const mockStore = new MockedAppendStore();
+        const content = "Hello World String";
+        const blockInfo = "1526919030474-55";
+        const key = BigInt(102), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
+
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+        const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+        if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+
+        let retrivedValue = sortedBlock.get(BigInt(10));
+        assert.deepStrictEqual(retrivedValue, null);
+
+        retrivedValue = sortedBlock.get(BigInt(4849244555433));
+        assert.deepStrictEqual(retrivedValue, null);
+    })
 });
