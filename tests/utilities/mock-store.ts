@@ -38,6 +38,10 @@ export class MockedAppendStore implements IAppendStore {
     append(data: Buffer): void {
         this.store = Buffer.concat([this.store, data]);
     }
+
+    clear() {
+        this.store = Buffer.alloc(0);
+    }
 }
 
 export function getRandomInt(min: number, max: number): number {
