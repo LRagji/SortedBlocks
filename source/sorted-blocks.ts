@@ -391,9 +391,9 @@ export class Version1SortedBlocks {
             return returnValue;
         }
         let accumulator = Buffer.alloc(0);
-        let data: Buffer | null = Buffer.alloc(0);
         let startPosition = fromPosition;
-        while (startPosition > tillPosition && data != null) {
+        let data: Buffer | null = this.appendOnlyStore.reverseRead(startPosition);
+        while (startPosition > tillPosition && data != null && data.length !== 0) {
             accumulator = Buffer.concat([data, accumulator]);
             startPosition -= data.length;
             data = this.appendOnlyStore.reverseRead(startPosition);
@@ -406,7 +406,6 @@ export class Version1SortedBlocks {
     }
 
     private * sections(): Generator<[key: bigint, absoluteOffset: number]> {
-        let sectionOffset: number | undefined = undefined;
         let accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, true);
         if (this.IndexIntegrityPassed === false) {
             const computedHash = Version1SortedBlocks.hashResolver(accumulator);

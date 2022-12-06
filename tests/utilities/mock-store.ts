@@ -29,7 +29,7 @@ export class MockedAppendStore implements IAppendStore {
             throw new Error(`Param "offset" cannot be lesser than 0.`);
         }
         const length = this.readCallback();
-        const start = fromPosition - length;
+        const start = Math.max(0, fromPosition - length);
         const data = this.store.subarray(start, fromPosition);
         if (this.diagnosticPrint === true) console.log(`read ${start} to ${fromPosition} len ${length}`);
         return data;

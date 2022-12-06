@@ -13,7 +13,7 @@ version.writeUIntBE(1, 0, 1);
 const modes: Array<{ name: string, context: { store: MockedAppendStore } }> = [
     { name: "Read Single Byte", context: { store: new MockedAppendStore() } },
     { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined, true) } },
-    //{ name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024) } },
+    { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024) } },
 ];
 
 while (modes.length > 0) {
@@ -59,7 +59,7 @@ while (modes.length > 0) {
             assert.deepStrictEqual(retrivedValue, value);
         })
 
-        it('shoud be able to deserialize data to its original form when reading single bytes from store underneath', async () => {
+        it('shoud be able to deserialize single kvp data to its original form', async () => {
             const mockStore = mode.context.store;
             const content = "Hello World String";
             const blockInfo = "1526919030474-55";
@@ -82,7 +82,7 @@ while (modes.length > 0) {
             assert.deepStrictEqual(retrivedValue, value);
         })
 
-        it('shoud be able to deserialize multiple data to its original form when reading single bytes from store underneath', async () => {
+        it('shoud be able to deserialize multiple kvp data to its original form ', async () => {
             const mockStore = mode.context.store;
             const content = "Hello World String";
             const blockInfo = "1526919030474-55";
