@@ -11,7 +11,7 @@ const version = Buffer.alloc(1);
 const bucketFactor = 1024;
 version.writeUIntBE(1, 0, 1);
 
-describe(`sorted-section specs`, () => {
+describe(`sorted-section serialize/deserialize specs`, () => {
 
     beforeEach(async function () {
 
@@ -20,6 +20,34 @@ describe(`sorted-section specs`, () => {
     afterEach(async function () {
 
     });
+
+    it('shoud not be able to serialize empty payload', async () => {
+        const mockStore = new MockedAppendStore();
+        const blockInfo = "1526919030474-55";
+        const blockInfoBuff = Buffer.from(blockInfo);
+
+        assert.throws(() => Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>()), new Error(`Payload cannot be empty map`));
+    })
+
+    it('should allow blockinfo to be empty buffer', async () => {
+        const mockStore = new MockedAppendStore();
+        const content = "Hello World String";
+        const key = BigInt(102), value = Buffer.from(content), blockInfoBuff = Buffer.alloc(0);
+
+        const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
+        assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+        const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length);
+        if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+        assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
+        assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
+        assert.strictEqual(sortedBlock.meta.keyRangeMin, key);
+        assert.strictEqual(sortedBlock.meta.keyBucketFactor, BigInt(1024));
+        assert.deepEqual(sortedBlock.meta.blockInfo, blockInfoBuff);
+
+        const retrivedValue = sortedBlock.get(key);
+        assert.deepStrictEqual(retrivedValue, value);
+    })
 
     it('shoud be able to deserialize data to its original form when reading single bytes from store underneath', async () => {
         const mockStore = new MockedAppendStore();

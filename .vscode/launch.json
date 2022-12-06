@@ -7,7 +7,7 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Test Debug",
+            "name": "Test",
             "args": [
                 "-r",
                 "ts-node/register",

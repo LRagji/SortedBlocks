@@ -3,7 +3,7 @@ import * as crypto from 'node:crypto';
 
 const testId = crypto.randomUUID();
 
-import { Version1SortedBlocks } from '../../../source/sorted-blocks.js';
+import { Version1SortedBlocks } from '../../source/sorted-blocks.js';
 import { FileStore } from './filestore.js';
 
 function generatePayload(time: bigint, tagId: bigint, payload: Map<bigint, Buffer>): Map<bigint, Buffer> {

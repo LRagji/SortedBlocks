@@ -28,6 +28,8 @@ export class Version1SortedBlocks {
 
     public static serialize(appendOnlyStore: IAppendStore, blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
+        if (payload.size < 1) throw new Error(`Payload cannot be empty map`);
+
         //console.time("  Sort");
         const sortedKeys = new BigInt64Array(payload.keys()).sort();
         //console.timeEnd("  Sort");
@@ -369,7 +371,17 @@ export class Version1SortedBlocks {
     }
 
     public * iterate(): Generator<[key: bigint, value: Buffer]> {
-        throw new Error("TBI");
+        const sectionIterator = this.sections();
+        let sectionCursor = sectionIterator.next();
+        while (!sectionCursor.done) {
+            const keysIterator = this.keys(sectionCursor.value[1]);
+            let keysCursor = keysIterator.next();
+            while (!keysCursor.done) {
+                yield [keysCursor.value.key, this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd)];
+                keysCursor = keysIterator.next();
+            }
+            sectionCursor = sectionIterator.next();
+        }
     }
 
     private efficientReversedRead(fromPosition: number, tillPosition: number, cache: boolean = false): Buffer {

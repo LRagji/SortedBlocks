@@ -1,4 +1,4 @@
-import { IAppendStore } from '../../../source/i-append-store.js';
+import { IAppendStore } from '../../source/i-append-store.js';
 import fs from 'node:fs';
 import path from "node:path";
 
