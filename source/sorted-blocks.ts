@@ -344,22 +344,27 @@ export class Version1SortedBlocks {
 
         //Find the belonging section.
         let sectionOffset: number | null = null;
-        const iter = this.sections();
-        let cursor = iter.next();
-        while (!cursor.done) {
-            if (cursor.value[0] === keySection) {
-                sectionOffset = cursor.value[1];
+        const sectionIterator = this.sections();
+        let sectionCursor = sectionIterator.next();
+        while (!sectionCursor.done) {
+            if (sectionCursor.value[0] === keySection) {
+                sectionOffset = sectionCursor.value[1];
                 break;
             }
-            cursor = iter.next();
+            sectionCursor = sectionIterator.next();
         }
         //Find the key in that section
         if (sectionOffset != null) {
-            const valuePointer = this.getValuePointer(sectionOffset, key);
-            if (valuePointer != null) {
-                return this.efficientReversedRead(valuePointer.absStart, valuePointer.absEnd);
+            const keysIterator = this.keys(sectionOffset);
+            let keysCursor = keysIterator.next();
+            while (!keysCursor.done) {
+                if (keysCursor.value.key === key) {
+                    return this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd);
+                }
+                keysCursor = keysIterator.next();
             }
         }
+        //Default send null
         return null;
     }
 
@@ -418,15 +423,15 @@ export class Version1SortedBlocks {
         //return sectionOffset;
     }
 
-    private getValuePointer(sectionOffset: number, key: bigint): { absStart: number, absEnd: number } | null {
+    private * keys(sectionAbsoluteOffset: number): Generator<{ key: bigint, absStart: number, absEnd: number }> {
         const bytesForIndexLength = 4, bytesForDataLength = 4;
-        let accumulator = this.efficientReversedRead(sectionOffset, (sectionOffset - (bytesForIndexLength + bytesForDataLength)), true);
+        let accumulator = this.efficientReversedRead(sectionAbsoluteOffset, (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength)), true);
         const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
         const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
-        accumulator = this.efficientReversedRead(sectionOffset - (bytesForIndexLength + bytesForDataLength), (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), true);
+        accumulator = this.efficientReversedRead(sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength), (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), true);
         let readOffset = accumulator.length;
         let start = readOffset, end = readOffset;
-        let valuePointer: { absStart: number, absEnd: number } | null = null;
+        let valuePointers: Array<{ key: bigint, absStart: number, absEnd: number }> = new Array<{ key: bigint, absStart: number, absEnd: number }>();
         while (readOffset > 0) {
             end = start;
             start -= 8;
@@ -434,20 +439,22 @@ export class Version1SortedBlocks {
             end = start;
             start -= 4;
             const relativeOffset = accumulator.subarray(start, end).readUint32BE();
-            if (valuePointer == null) {
-                if (actualKey === key) {
-                    valuePointer = { absStart: (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: -1 };
+            valuePointers.push({ key: actualKey, absStart: (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset)), absEnd: -1 });
+            if (valuePointers.length > 1) {
+                const previousPointer = valuePointers.shift();
+                if (previousPointer != null) {
+                    previousPointer.absEnd = (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset));
+                    yield previousPointer;
                 }
-            }
-            else if (valuePointer.absEnd === -1) {
-                valuePointer.absEnd = (sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + relativeOffset));
-                break;
             }
             readOffset = start;
         }
-        if (valuePointer !== null && valuePointer.absEnd === -1) {
-            valuePointer.absEnd = sectionOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength);
+        if (valuePointers.length > 0) {
+            const previousPointer = valuePointers.shift();
+            if (previousPointer != null) {
+                previousPointer.absEnd = sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength + dataLength);
+                yield previousPointer;
+            }
         }
-        return valuePointer;
     }
 }
