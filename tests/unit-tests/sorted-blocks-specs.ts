@@ -3,10 +3,6 @@ import crypto from 'node:crypto';
 import { Version1SortedBlocks } from '../../source/sorted-blocks';
 import { MockedAppendStore, getRandomInt } from '../utilities/mock-store';
 
-const hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-const magicBuffer = hashResolver(Buffer.from(`16111987`));
-const SOP = magicBuffer.subarray(0, 4);;
-const EOP = magicBuffer.subarray(12, 16);
 const version = Buffer.alloc(1);
 const bucketFactor = BigInt(1024);
 version.writeUIntBE(1, 0, 1);

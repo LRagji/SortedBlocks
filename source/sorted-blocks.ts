@@ -130,13 +130,13 @@ export class Version1SortedBlocks {
                 accumulator = Buffer.concat([data, accumulator]);
                 let indexOfFirstByte = -1;
                 do {
-                    indexOfFirstByte = data.indexOf(gaurdsIndexesToFind[state][0], (indexOfFirstByte + 1));//When written EOP -- -- --> SOP Left to Right When read back it will be Right to Left
+                    indexOfFirstByte = data.lastIndexOf(gaurdsIndexesToFind[state][0], (indexOfFirstByte === -1 ? data.length : indexOfFirstByte - 1));//When written EOP -- -- --> SOP Left to Right When read back it will be Left to Right
                     if (indexOfFirstByte !== -1 && accumulator.length >= (gaurdsIndexesToFind[state].length + indexOfFirstByte)
                         && gaurdsIndexesToFind[state].reduce((a, e, idx) => a && e === accumulator[indexOfFirstByte + idx], true)) {
                         if (state === 0) {
                             actualStartPosition = (offset - data.length) + (indexOfFirstByte + 1 + gaurdsIndexesToFind[state].length);
                             accumulator = accumulator.subarray(0, (indexOfFirstByte + gaurdsIndexesToFind[state].length));//Trims the right end of the buffer
-                            //Next 2 lines written to search EOP in the same segment read, where SOP was found. Forcing the same offset be read twice
+                            //Next 2 lines try to search EOP in the same segment where SOP was found, by forcing the same segment to be read twice.
                             accumulator = accumulator.subarray(data.length);//Trim the recently added data only
                             data = Buffer.alloc(0);
                         }
@@ -152,7 +152,7 @@ export class Version1SortedBlocks {
                         accumulator = accumulator.subarray(0, data.length + accumulatorMaxLength);
                     }
                 }
-                while (indexOfFirstByte !== -1)
+                while (indexOfFirstByte > 0)
                 offset -= data.length;
             }
             else {
