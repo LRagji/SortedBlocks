@@ -33,7 +33,8 @@ export class MockedAppendStore implements IAppendStore {
         let ops = this.readOPS.get(operationBucket) || 0;
         ops++;
         this.readOPS.set(operationBucket, ops);
-        this.readOPS.delete(operationBucket - 15000);
+        const windowStart = operationBucket - 15000;
+        this.readOPS.forEach((v, k) => k < windowStart ? this.readOPS.delete(k) : null);
 
         if (fromPosition < 0) {
             throw new Error(`Param "offset" cannot be lesser than 0.`);

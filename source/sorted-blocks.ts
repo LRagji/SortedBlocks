@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import { IAppendStore } from './i-append-store';
 import { SortedSection } from './sorted-section';
 
+interface IContextualCache {
+    cache: Buffer | null,
+    result: Buffer | null,
+    absoluteStartPosition: number
+}
+
 export class Version1SortedBlocks {
 
     //TODO:
@@ -124,8 +130,10 @@ export class Version1SortedBlocks {
         let returnValue: Version1SortedBlocks | null = null;
         let data: Buffer | null = null;
         let actualStartPosition = -1, actualEndPosition = -1;
+        let cacheContext: IContextualCache | null = null;
         do {
-            data = appendOnlyStore.reverseRead(offset);
+            cacheContext = Version1SortedBlocks.efficientReverseReads(appendOnlyStore, offset, cacheContext);
+            data = cacheContext.result;
             if (data != null && data.length > 0) {
                 accumulator = Buffer.concat([data, accumulator]);
                 let indexOfFirstByte = -1;
@@ -303,6 +311,14 @@ export class Version1SortedBlocks {
         }
     }
 
+    private static efficientReverseReads(appendOnlyStore: IAppendStore, offset: number, context: IContextualCache | null = null): IContextualCache {
+        if (context != null && context.cache != null && context.absoluteStartPosition === offset) {
+            return context;
+        }
+        const readResult = appendOnlyStore.reverseRead(offset);
+        return { result: readResult, cache: readResult, absoluteStartPosition: offset };
+    }
+
     public IndexIntegrityPassed: boolean = false;
     public DataIntegrityPassed: boolean = false;
     private memoryCache = new Map<string, Buffer>();
@@ -384,7 +400,7 @@ export class Version1SortedBlocks {
         }
     }
 
-    private efficientReversedRead(fromPosition: number, tillPosition: number, cache: boolean = false): Buffer {
+    private efficientReversedRead(fromPosition: number, tillPosition: number, cache: boolean = false, context: { cache: Buffer, result: Buffer } | null = null): Buffer {
         const cacheKey = `${fromPosition}:${tillPosition}`;
         let returnValue: Buffer | undefined = this.memoryCache.get(cacheKey);
         if (returnValue != undefined) {
