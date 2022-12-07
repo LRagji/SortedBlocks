@@ -18,6 +18,9 @@ export class MockedStore implements IStore {
 
 export class MockedAppendStore implements IAppendStore {
 
+    //Stats
+    private readonly readOPS = new Map<number, number>();
+
     constructor(
         public store: Buffer = Buffer.alloc(0),
         public readCallback = () => 1,
@@ -25,6 +28,13 @@ export class MockedAppendStore implements IAppendStore {
         public diagnosticPrint: boolean = false) { }
 
     reverseRead(fromPosition: number): Buffer {
+        const operationTimestamp = Date.now();
+        const operationBucket = operationTimestamp - (operationTimestamp % 1000);
+        let ops = this.readOPS.get(operationBucket) || 0;
+        ops++;
+        this.readOPS.set(operationBucket, ops);
+        this.readOPS.delete(operationBucket - 15000);
+
         if (fromPosition < 0) {
             throw new Error(`Param "offset" cannot be lesser than 0.`);
         }
@@ -41,6 +51,11 @@ export class MockedAppendStore implements IAppendStore {
 
     clear() {
         this.store = Buffer.alloc(0);
+        this.readOPS.clear();
+    }
+
+    public statistics(): { readOps: Map<number, number> } {
+        return { readOps: this.readOPS };
     }
 }
 

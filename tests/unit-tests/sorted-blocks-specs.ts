@@ -8,7 +8,7 @@ const bucketFactor = BigInt(1024);
 version.writeUIntBE(1, 0, 1);
 const modes: Array<{ name: string, context: { store: MockedAppendStore } }> = [
     { name: "Read Single Byte", context: { store: new MockedAppendStore() } },
-    { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined, true) } },
+    { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined) } },
     { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024) } },
 ];
 
@@ -156,7 +156,7 @@ while (modes.length > 0) {
             }
         })
 
-        it('should serialize 1 million data points in acceptable time', async () => {
+        it('should serialize 1 million key value pairs in acceptable time', async () => {
             const numberOfValues = 1000000;
             const mockStore = mode.context.store;
             const content = "____________This is a test content for 61 bytes._____________";
@@ -169,9 +169,29 @@ while (modes.length > 0) {
                 payload.set(BigInt(index), value);
             }
 
+            let st = Date.now();
             const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, payload, value.length);
+            let elapsed = Date.now() - st;
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
-            console.log(`${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
+
+            console.log(`Serializing[${elapsed}ms] ${numberOfValues} items of ${value.length + 8} bytes each results in ${((bytesWritten / 1024) / 1024).toFixed(2)} MB, Overhead: ${((((bytesWritten) - ((value.length + 8) * numberOfValues)) / ((value.length + 8) * numberOfValues)) * 100).toFixed(2)}%.`)
+
+            const readKey = BigInt(353213);//BigInt(getRandomInt(0, numberOfValues)); //This can be any number to level field across modes i have to fix this to one or ops will vary.
+            st = Date.now();
+            const block = Version1SortedBlocks.deserialize(mockStore, bytesWritten);
+            const actualValue = block?.get(readKey);
+            elapsed = Date.now() - st;
+            assert.notEqual(block, null);
+            assert.deepEqual(actualValue, payload.get(readKey));
+            const stats = mockStore.statistics();
+            const readStats = Array.from(stats.readOps.values()).reduce((acc, e) => {
+                acc.max = Math.max(acc.max, e);
+                acc.min = Math.min(acc.min, e);
+                acc.sum = acc.sum + e;
+                return acc;
+            }, { min: Number.MAX_SAFE_INTEGER, max: Number.MIN_SAFE_INTEGER, sum: 0 });
+            console.log(`Deserialize & Get Time[key:${readKey}]: ${elapsed}ms, IOPS: Max:${readStats.max} Min:${readStats.min} Total:${readStats.sum} Avg:${readStats.sum / stats.readOps.size}/sec`)
+
         }).timeout(-1)
     });
 }
