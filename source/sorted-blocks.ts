@@ -23,6 +23,7 @@ export class Version1SortedBlocks {
     // 9. Add validation for data hash via flag.
     //10. reduce readiops from 9k in get.
     //11. Add option to validate entire data.
+    //12. Failure Mode if we see SOP or EOP exact bytes in payload then we skip the entire segment :(
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
     private static readonly magicBuffer = Version1SortedBlocks.hashResolver(Buffer.from(`16111987`));
     private static readonly SOP = Version1SortedBlocks.magicBuffer.subarray(0, 4);
@@ -130,10 +131,8 @@ export class Version1SortedBlocks {
         let returnValue: Version1SortedBlocks | null = null;
         let data: Buffer | null = null;
         let actualStartPosition = -1, actualEndPosition = -1;
-        let cacheContext: IContextualCache | null = null;
         do {
-            cacheContext = Version1SortedBlocks.efficientReverseReads(appendOnlyStore, offset, cacheContext);
-            data = cacheContext.result;
+            data = Version1SortedBlocks.efficientReverseReads(appendOnlyStore, offset);
             if (data != null && data.length > 0) {
                 accumulator = Buffer.concat([data, accumulator]);
                 let indexOfFirstByte = -1;
@@ -311,12 +310,8 @@ export class Version1SortedBlocks {
         }
     }
 
-    private static efficientReverseReads(appendOnlyStore: IAppendStore, offset: number, context: IContextualCache | null = null): IContextualCache {
-        if (context != null && context.cache != null && context.absoluteStartPosition === offset) {
-            return context;
-        }
-        const readResult = appendOnlyStore.reverseRead(offset);
-        return { result: readResult, cache: readResult, absoluteStartPosition: offset };
+    private static efficientReverseReads(appendOnlyStore: IAppendStore, offset: number): Buffer | null {
+        return appendOnlyStore.reverseRead(offset);
     }
 
     public IndexIntegrityPassed: boolean = false;
@@ -352,7 +347,6 @@ export class Version1SortedBlocks {
     }
 
     public get(key: bigint): Buffer | null {
-        let cacheContext: IContextualCache | null = null;
         if (key < Version1SortedBlocks.minBigInt) throw new Error(`Only positive keys of 64bit values are allowed,from ${Version1SortedBlocks.minBigInt}) to ${Version1SortedBlocks.maxBigInt} [${key}]`);
         if (key > Version1SortedBlocks.maxBigInt) throw new Error(`Only positive keys of 64bit values are allowed,from ${Version1SortedBlocks.minBigInt}) to ${Version1SortedBlocks.maxBigInt} [${key}]`);
         if (key > this.meta.keyRangeMax || key < this.meta.keyRangeMin) {
@@ -377,8 +371,7 @@ export class Version1SortedBlocks {
             let keysCursor = keysIterator.next();
             while (!keysCursor.done) {
                 if (keysCursor.value.key === key) {
-                    cacheContext = this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0, cacheContext);
-                    return cacheContext.result;
+                    return this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0);
                 }
                 keysCursor = keysIterator.next();
             }
@@ -395,43 +388,28 @@ export class Version1SortedBlocks {
             const keysIterator = this.keys(sectionCursor.value[1]);
             let keysCursor = keysIterator.next();
             while (!keysCursor.done) {
-                cacheContext = this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0, cacheContext)
-                yield [keysCursor.value.key, cacheContext.result as Buffer];
+                const value = this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0)
+                yield [keysCursor.value.key, value];
                 keysCursor = keysIterator.next();
             }
             sectionCursor = sectionIterator.next();
         }
     }
 
-    private efficientReversedRead(fromPosition: number, tillPosition: number, cacheProbability: number = 0, context: IContextualCache | null = null): IContextualCache {
-        if (context != null && context.cache != null
-            && context.absoluteStartPosition >= fromPosition
-            && (context.absoluteStartPosition - context.cache.length) < tillPosition) {
-            const endIndex = context.cache.length - (context.absoluteStartPosition - fromPosition);
-            const startIndex = endIndex - (fromPosition - tillPosition);
-            context.result = context.cache.subarray(startIndex, endIndex);
-            return context;
-        }
+    private efficientReversedRead(fromPosition: number, tillPosition: number, cacheProbability: number = 0): Buffer {
         let accumulator = Buffer.alloc(0);
         let startPosition = fromPosition;
-        context = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition, context);
-        let data: Buffer | null = context.result;
+        let data: Buffer | null = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition);
         while (startPosition > tillPosition && data != null && data.length !== 0) {
             accumulator = Buffer.concat([data, accumulator]);
             startPosition -= data.length;
-            const appendContext = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition, context);
-            context.cache = Buffer.concat([appendContext.cache as Buffer, context.cache as Buffer]);
-            data = appendContext.result;
+            data = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition);
         }
-        const returnValue = accumulator.subarray(accumulator.length - (fromPosition - tillPosition));
-        context.result = returnValue
-        return context;
+        return accumulator.subarray(accumulator.length - (fromPosition - tillPosition));
     }
 
     private * sections(): Generator<[key: bigint, absoluteOffset: number]> {
-        let cacheContext: IContextualCache | null = null;
-        cacheContext = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, 1, cacheContext);
-        let accumulator = cacheContext.result as Buffer;
+        let accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, 1);
         if (this.IndexIntegrityPassed === false) {
             const computedHash = Version1SortedBlocks.hashResolver(accumulator);
             this.IndexIntegrityPassed = this.meta.indexHash.reduce((a, e, idx) => a && e === computedHash[idx], true);
@@ -455,14 +433,11 @@ export class Version1SortedBlocks {
     }
 
     private * keys(sectionAbsoluteOffset: number): Generator<{ key: bigint, absStart: number, absEnd: number }> {
-        let cacheContext: IContextualCache | null = null;
         const bytesForIndexLength = 4, bytesForDataLength = 4;
-        cacheContext = this.efficientReversedRead(sectionAbsoluteOffset, (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength)), 0.5, cacheContext);
-        let accumulator = cacheContext.result as Buffer;
+        let accumulator = this.efficientReversedRead(sectionAbsoluteOffset, (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength)), 0.5);
         const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
         const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
-        cacheContext = this.efficientReversedRead(sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength), (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), 0.25, cacheContext);
-        accumulator = cacheContext.result as Buffer;
+        accumulator = this.efficientReversedRead(sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength), (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), 0.25);
         let readOffset = accumulator.length;
         let start = readOffset, end = readOffset;
         let valuePointers: Array<{ key: bigint, absStart: number, absEnd: number }> = new Array<{ key: bigint, absStart: number, absEnd: number }>();

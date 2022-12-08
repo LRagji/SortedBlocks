@@ -7,8 +7,8 @@ const version = Buffer.alloc(1);
 const bucketFactor = BigInt(1024);
 version.writeUIntBE(1, 0, 1);
 const modes: Array<{ name: string, context: { store: MockedAppendStore } }> = [
-    //{ name: "Read Single Byte", context: { store: new MockedAppendStore() } },
-    //{ name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined) } },
+    { name: "Read Single Byte", context: { store: new MockedAppendStore() } },
+    { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined) } },
     { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024) } },
 ];
 
@@ -158,15 +158,10 @@ while (modes.length > 0) {
                     assert.fail(`Value for key${idx} cannot be null`);
                 }
                 else {
-                    try {
-                        assert.deepStrictEqual(retrivedValue, kvps.get(key), `Values not equal for key:${key}}`);
-                    }
-                    catch (ex) {
-                        console.log(ex);
-                    }
+                    assert.deepStrictEqual(retrivedValue, kvps.get(key), `Values not equal for key:${key}}`);
                 }
             }
-        })
+        }).timeout(-1)
 
         it('should serialize 1 million key value pairs in acceptable time', async () => {
             const numberOfValues = 1000000;
