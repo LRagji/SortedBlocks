@@ -399,12 +399,17 @@ export class Version1SortedBlocks {
     private efficientReversedRead(fromPosition: number, tillPosition: number, cacheProbability: number = 0): Buffer {
         let accumulator = Buffer.alloc(0);
         let startPosition = fromPosition;
-        let data: Buffer | null = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition);
-        while (startPosition > tillPosition && data != null && data.length !== 0) {
-            accumulator = Buffer.concat([data, accumulator]);
-            startPosition -= data.length;
-            data = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition);
+        do {
+            let data: Buffer | null = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition);
+            if (data != null && data.length !== 0) {
+                accumulator = Buffer.concat([data, accumulator]);
+                startPosition -= data.length;
+            }
+            else if (data == null || data.length === 0) {
+                break;
+            }
         }
+        while (startPosition > tillPosition)
         return accumulator.subarray(accumulator.length - (fromPosition - tillPosition));
     }
 
