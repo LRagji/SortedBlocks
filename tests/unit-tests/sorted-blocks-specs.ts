@@ -7,9 +7,9 @@ const version = Buffer.alloc(1);
 const bucketFactor = BigInt(1024);
 version.writeUIntBE(1, 0, 1);
 const modes: Array<{ name: string, context: { store: MockedAppendStore, cache: ICacheProxy | null } }> = [
-    // { name: "Read Single Byte", context: { store: new MockedAppendStore(), cache: new LocalCache() } },
-    // { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined), cache: new LocalCache() } },
-    // { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024), cache: new LocalCache() } },
+    { name: "Read Single Byte", context: { store: new MockedAppendStore(), cache: new LocalCache() } },
+    { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined), cache: new LocalCache() } },
+    { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024), cache: new LocalCache() } },
     { name: "Read Fixed Without Cache", context: { store: new MockedAppendStore(undefined, () => 1024), cache: null } },
 ];
 
@@ -34,6 +34,13 @@ while (modes.length > 0) {
                 return acc;
             }, { min: Number.MAX_SAFE_INTEGER, max: Number.MIN_SAFE_INTEGER, sum: 0 });
             console.log(`Read IOPS: Max:${readStats.max} Min:${readStats.min} Total:${readStats.sum} Avg:${readStats.sum / stats.readOps.size}/sec`)
+            if (mode.context.cache != null) {
+                let log = "Cache Stats:";
+                (mode.context.cache as LocalCache).statistics().forEach((stats, weight) => {
+                    log += ` ${weight}[${(stats.Bytes / Math.max(stats.Hits, 1)).toFixed(3)}]: Bytes:${stats.Bytes} Count:${stats.Count} Hits:${stats.Hits} |`;
+                })
+                console.log(log);
+            }
         });
 
         it('shoud not be able to serialize empty payload', async () => {
