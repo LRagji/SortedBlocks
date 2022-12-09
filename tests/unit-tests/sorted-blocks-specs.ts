@@ -6,10 +6,11 @@ import { MockedAppendStore, getRandomInt } from '../utilities/mock-store';
 const version = Buffer.alloc(1);
 const bucketFactor = BigInt(1024);
 version.writeUIntBE(1, 0, 1);
-const modes: Array<{ name: string, context: { store: MockedAppendStore, cache: ICacheProxy } }> = [
-    { name: "Read Single Byte", context: { store: new MockedAppendStore(), cache: new LocalCache() } },
-    { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined), cache: new LocalCache() } },
-    { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024), cache: new LocalCache() } },
+const modes: Array<{ name: string, context: { store: MockedAppendStore, cache: ICacheProxy | null } }> = [
+    // { name: "Read Single Byte", context: { store: new MockedAppendStore(), cache: new LocalCache() } },
+    // { name: "Read Random Bytes", context: { store: new MockedAppendStore(undefined, () => getRandomInt(1, 10), undefined), cache: new LocalCache() } },
+    // { name: "Read Fixed Bytes", context: { store: new MockedAppendStore(undefined, () => 1024), cache: new LocalCache() } },
+    { name: "Read Fixed Without Cache", context: { store: new MockedAppendStore(undefined, () => 1024), cache: null } },
 ];
 
 while (modes.length > 0) {
@@ -21,7 +22,7 @@ while (modes.length > 0) {
 
         beforeEach(async function () {
             mode.context.store.clear();
-            mode.context.cache.clear();
+            mode.context.cache?.clear();
         });
 
         afterEach(async function () {
