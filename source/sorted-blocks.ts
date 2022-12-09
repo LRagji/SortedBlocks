@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { ICacheProxy } from './cache-proxy';
 import { IAppendStore } from './i-append-store';
 import { SortedSection } from './sorted-section';
 
@@ -123,7 +124,7 @@ export class Version1SortedBlocks {
         return dataToAppend.length;
     }
 
-    public static deserialize(appendOnlyStore: IAppendStore, offset: number): Version1SortedBlocks | null {
+    public static deserialize(appendOnlyStore: IAppendStore, offset: number, cache: ICacheProxy | null = null): Version1SortedBlocks | null {
         const accumulatorMaxLength = Math.max(Version1SortedBlocks.SOP.length, Version1SortedBlocks.EOP.length) * 2;
         let accumulator = Buffer.alloc(0);
         const gaurdsIndexesToFind = [Version1SortedBlocks.SOP, Version1SortedBlocks.EOP];
@@ -132,7 +133,7 @@ export class Version1SortedBlocks {
         let data: Buffer | null = null;
         let actualStartPosition = -1, actualEndPosition = -1;
         do {
-            data = Version1SortedBlocks.efficientReverseReads(appendOnlyStore, offset);
+            data = Version1SortedBlocks.cachedReverseReads(appendOnlyStore, offset, cache, 0);
             if (data != null && data.length > 0) {
                 accumulator = Buffer.concat([data, accumulator]);
                 let indexOfFirstByte = -1;
@@ -255,7 +256,7 @@ export class Version1SortedBlocks {
                 "headerHash": headerHash1,
                 "storeId": appendOnlyStore.Id,
                 "nextBlockOffset": actualEndPosition - (rootIndexLength + rootDataLength)
-            }, appendOnlyStore);
+            }, appendOnlyStore, cache);
         }
 
         return returnValue;
@@ -310,8 +311,13 @@ export class Version1SortedBlocks {
         }
     }
 
-    private static efficientReverseReads(appendOnlyStore: IAppendStore, offset: number): Buffer | null {
-        return appendOnlyStore.reverseRead(offset);
+    private static cachedReverseReads(appendOnlyStore: IAppendStore, offset: number, cache: ICacheProxy | null = null, cacheProbability: number = 0): Buffer | null {
+        if (cache != null) {
+            return cache.reverseRead(offset, appendOnlyStore, cacheProbability);
+        }
+        else {
+            return appendOnlyStore.reverseRead(offset);
+        }
     }
 
     public IndexIntegrityPassed: boolean = false;
@@ -333,7 +339,8 @@ export class Version1SortedBlocks {
             storeId: string,
             nextBlockOffset: number
         },
-        private readonly appendOnlyStore: IAppendStore
+        private readonly appendOnlyStore: IAppendStore,
+        private readonly cache: ICacheProxy | null
     ) {
         if (this.meta == null) {
             throw new Error(`Parameter "meta" is needed for the block to be constructed.`)
@@ -371,7 +378,7 @@ export class Version1SortedBlocks {
             let keysCursor = keysIterator.next();
             while (!keysCursor.done) {
                 if (keysCursor.value.key === key) {
-                    return this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0);
+                    return this.segmentedReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0);
                 }
                 keysCursor = keysIterator.next();
             }
@@ -388,7 +395,7 @@ export class Version1SortedBlocks {
             const keysIterator = this.keys(sectionCursor.value[1]);
             let keysCursor = keysIterator.next();
             while (!keysCursor.done) {
-                const value = this.efficientReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0)
+                const value = this.segmentedReversedRead(keysCursor.value.absStart, keysCursor.value.absEnd, 0)
                 yield [keysCursor.value.key, value];
                 keysCursor = keysIterator.next();
             }
@@ -396,11 +403,11 @@ export class Version1SortedBlocks {
         }
     }
 
-    private efficientReversedRead(fromPosition: number, tillPosition: number, cacheProbability: number = 0): Buffer {
+    private segmentedReversedRead(fromPosition: number, tillPosition: number, cacheProbability: number = 0): Buffer {
         let accumulator = Buffer.alloc(0);
         let startPosition = fromPosition;
         do {
-            let data: Buffer | null = Version1SortedBlocks.efficientReverseReads(this.appendOnlyStore, startPosition);
+            let data: Buffer | null = Version1SortedBlocks.cachedReverseReads(this.appendOnlyStore, startPosition, this.cache, cacheProbability);
             if (data != null && data.length !== 0) {
                 accumulator = Buffer.concat([data, accumulator]);
                 startPosition -= data.length;
@@ -414,7 +421,7 @@ export class Version1SortedBlocks {
     }
 
     private * sections(): Generator<[key: bigint, absoluteOffset: number]> {
-        let accumulator = this.efficientReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, 1);
+        let accumulator = this.segmentedReversedRead(this.meta.actualHeaderEndPosition, this.meta.actualHeaderEndPosition - this.meta.indexLength, 1);
         if (this.IndexIntegrityPassed === false) {
             const computedHash = Version1SortedBlocks.hashResolver(accumulator);
             this.IndexIntegrityPassed = this.meta.indexHash.reduce((a, e, idx) => a && e === computedHash[idx], true);
@@ -439,10 +446,10 @@ export class Version1SortedBlocks {
 
     private * keys(sectionAbsoluteOffset: number): Generator<{ key: bigint, absStart: number, absEnd: number }> {
         const bytesForIndexLength = 4, bytesForDataLength = 4;
-        let accumulator = this.efficientReversedRead(sectionAbsoluteOffset, (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength)), 0.5);
+        let accumulator = this.segmentedReversedRead(sectionAbsoluteOffset, (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength)), 0.5);
         const indexLength = accumulator.subarray(0, bytesForIndexLength).readUint32BE();
         const dataLength = accumulator.subarray(bytesForIndexLength, (bytesForDataLength + bytesForIndexLength)).readUint32BE();
-        accumulator = this.efficientReversedRead(sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength), (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), 0.25);
+        accumulator = this.segmentedReversedRead(sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength), (sectionAbsoluteOffset - (bytesForIndexLength + bytesForDataLength + indexLength)), 0.25);
         let readOffset = accumulator.length;
         let start = readOffset, end = readOffset;
         let valuePointers: Array<{ key: bigint, absStart: number, absEnd: number }> = new Array<{ key: bigint, absStart: number, absEnd: number }>();
