@@ -71,7 +71,7 @@ while (modes.length > 0) {
             assert.deepStrictEqual(retrivedValue, value);
         })
 
-        it('shoud be able to read null when key doesnt exists', async () => {
+        it('shoud be able to read null when key doesnt exists out of range', async () => {
             const mockStore = mode.context.store;
             const content = "Hello World String";
             const blockInfo = "1526919030474-55";
@@ -84,6 +84,25 @@ while (modes.length > 0) {
             if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
 
             let retrivedValue = sortedBlock.get(BigInt(10));
+            assert.deepStrictEqual(retrivedValue, null);
+
+            retrivedValue = sortedBlock.get(BigInt(4849244555433));
+            assert.deepStrictEqual(retrivedValue, null);
+        })
+
+        it('shoud be able to read null when key doesnt exists within range', async () => {
+            const mockStore = mode.context.store;
+            const content = "Hello World String";
+            const blockInfo = "1526919030474-55";
+            const key1 = BigInt(102), key2 = BigInt(200), value = Buffer.from(content), blockInfoBuff = Buffer.from(blockInfo);
+
+            const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key1, value], [key2, value]]), value.length);
+            assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
+
+            let retrivedValue = sortedBlock.get(BigInt(110));
             assert.deepStrictEqual(retrivedValue, null);
 
             retrivedValue = sortedBlock.get(BigInt(4849244555433));
@@ -170,6 +189,49 @@ while (modes.length > 0) {
                     assert.deepStrictEqual(retrivedValue, kvps.get(key), `Values not equal for key:${key}}`);
                 }
             }
+        }).timeout(-1)
+
+        it('shoud be able to iterate over all data from all blocks in ascending order with original data', async () => {
+            const mockStore = mode.context.store;
+            const content = "Hello World String";
+            const blockInfo = "1526919030474-55";
+            const blockInfoBuff = Buffer.from(blockInfo);
+            const numberOfSamples = 10;
+            let numberOfBlocks = 10;
+
+            const expectedData = Array<{ k: BigInt, v: Buffer }>();
+            let bytesWritten = 0;
+            while (numberOfBlocks > 0) {
+                const kvps = new Map<bigint, Buffer>();
+                let blockData = Array<{ k: BigInt, v: Buffer }>();
+                for (let idx = 0; idx < numberOfSamples; idx++) {
+                    const key = BigInt(idx);
+                    const value = Buffer.from(content + `${idx}.`);
+                    kvps.set(key, value);
+                    blockData.push({ k: key, v: value });
+                }
+                blockData = blockData.reverse();
+                expectedData.push(...blockData);
+                bytesWritten += Version1SortedBlocks.serialize(mockStore, blockInfoBuff, kvps);
+                numberOfBlocks--;
+            }
+            assert.deepStrictEqual(bytesWritten, mockStore.store.length);
+
+            let block = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            while (expectedData.length > 0 && block != null) {
+                const cursor = block.iterate();
+                let result = cursor.next();
+                while (!result.done) {
+                    const actualKey = result.value[0];
+                    const actualValue = result.value[1];
+                    const expected = expectedData.pop();
+                    assert.strictEqual(actualKey, expected?.k);
+                    assert.deepStrictEqual(actualValue, expected?.v);
+                    result = cursor.next();
+                }
+                block = Version1SortedBlocks.deserialize(mockStore, block.meta.nextBlockOffset, mode.context.cache);
+            }
+            assert.strictEqual(expectedData.length, 0);
         }).timeout(-1)
 
         it('should serialize 1 million key value pairs in acceptable time', async () => {
