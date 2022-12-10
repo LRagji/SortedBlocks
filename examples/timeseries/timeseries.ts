@@ -6,35 +6,39 @@ const testId = crypto.randomUUID();
 import { Version1SortedBlocks } from '../../source/sorted-blocks.js';
 import { FileStore } from './filestore.js';
 import { LocalCache } from "../../source/cache-proxy.js";
-const dataDirectory = path.join(__dirname, "../../../data/");
+const dataDirectory = path.join(__dirname, "../../../data/", testId);
 
 function generatePayload(time: bigint, tagId: bigint, payload: Map<bigint, Buffer>): Map<bigint, Buffer> {
-    //for(let tagIdx = 0n; tagIdx <totalTags; tagIdx++) {
     const sample = Buffer.alloc(8 + 8 + 16);//Time,Value,Quality
     sample.writeBigUInt64BE(time);//Time
     sample.writeDoubleBE(12 + 0.5, 8);//Value
     sample.writeBigUInt64BE(tagId, 16);//Quality 1
     sample.writeBigUInt64BE(tagId), 24;//Quality 2
     payload.set(tagId, sample);
-    //}
     return payload;
 }
-
-function purge(fileName: string, payload: Map<bigint, Buffer>) {
+//==================================================================================Write==========================================================================
+function purge(filePath: string, payload: Map<bigint, Buffer>) {
     const blockInfo = Buffer.from(JSON.stringify({ "dt": Date.now() }));
-    const store = new FileStore(path.join(dataDirectory, testId, fileName));
+    const store = new FileStore(filePath);
     try {
         Version1SortedBlocks.serialize(store, blockInfo, payload);
     }
     finally {
         store.close();
-        console.log(`Purged:${testId}/${fileName} with ${payload.size} samples.`);
+        console.log(`Purged:${filePath} with ${payload.size} samples.`);
     }
 }
 
 function write() {
-    const timePartitionAlog = (time: bigint): bigint => time - (time % BigInt(3600000)); //1 Hour
-    const tagPartitionAlog = (tag: bigint): bigint => tag - (tag % BigInt(3000)); //Max IOPS
+    const timePartitionAlgo = (time: bigint): bigint => time - (time % BigInt(3600000)); //1 Hour
+    const tagPartitionAlgo = (tag: bigint): bigint => tag - (tag % BigInt(3000)); //Max IOPS
+    const diskSelection = (tagPart: bigint, totalDisks: bigint): bigint => tagPart % totalDisks;
+    const generatePath = (tag: bigint, time: bigint, diskPaths: string[]): string => {
+        const tagPart = tagPartitionAlgo(tag), timePart = timePartitionAlgo(time);
+        const diskPart = parseInt(diskSelection(tagPart, BigInt(diskPaths.length)).toString(), 10);
+        return path.join(diskPaths[diskPart], `${tagPart}-${timePart}`, `raw.hb`);
+    }
     const totalTags = BigInt(5999);
     const totalTime = BigInt(3600);
     let purgeFileName = "";
@@ -42,7 +46,7 @@ function write() {
     const purgeAcc = new Map<bigint, Buffer>();
     for (let time = BigInt(0); time < totalTime; time++) {
         for (let tagIdx = BigInt(0); tagIdx < totalTags; tagIdx++) {
-            const fileName = `${tagPartitionAlog(tagIdx)}-${timePartitionAlog(time)}.wal`;
+            const fileName = generatePath(tagIdx, time, [dataDirectory]);//`${timePartitionAlgo(tagIdx)}-${timePartitionAlgo(time)}.wal`;
             if (purgeFileName !== fileName) {
                 if (purgeFileName !== "") {
                     purge(purgeFileName, purgeAcc);
@@ -63,7 +67,7 @@ function write() {
 
 function read() {
     const st = Date.now();
-    const filePath = path.join(dataDirectory, "4c197082-043f-4ee9-a2d3-3540783ea9ba/0-0.wal");
+    const filePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/4c0cab6d-2c0a-4745-9437-2556b848887e/0-0/raw.hb");
     const store = new FileStore(filePath, 4096);
     const cache = new LocalCache();
     //let block: null | Version1SortedBlocks = null;
@@ -99,5 +103,5 @@ function read() {
     }, { min: Number.MAX_SAFE_INTEGER, max: Number.MIN_SAFE_INTEGER, sum: 0 });
     console.log(`Reading completed with ${blockCounter} blocks within ${elapsed}ms with OPS: Total:${readStats.sum} Max:${readStats.max} Min:${readStats.min} Avg:${(readStats.sum / stats.readOps.size).toFixed(2)} `);
 }
-
+//==================================================================================Execute==========================================================================
 read();
