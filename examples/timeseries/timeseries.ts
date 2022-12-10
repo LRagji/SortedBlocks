@@ -6,7 +6,7 @@ const testId = crypto.randomUUID();
 import { Version1SortedBlocks } from '../../source/sorted-blocks.js';
 import { FileStore } from './filestore.js';
 import { LocalCache } from "../../source/cache-proxy.js";
-const dataDirectory = path.join(__dirname, "../../../data/", testId);
+const dataDirectory = path.join(__dirname, "../../../data/");
 
 function generatePayload(time: bigint, tagId: bigint, payload: Map<bigint, Buffer>): Map<bigint, Buffer> {
     const sample = Buffer.alloc(8 + 8 + 16);//Time,Value,Quality
@@ -40,7 +40,7 @@ function write() {
         return path.join(diskPaths[diskPart], `${tagPart}-${timePart}`, `raw.hb`);
     }
     const totalTags = BigInt(1000000);
-    const totalTime = BigInt(3600);
+    const totalTime = BigInt(60);
     let purgeFileName = "";
 
     const purgeAcc = new Map<bigint, Buffer>();
@@ -48,7 +48,7 @@ function write() {
         const st = Date.now();
         const uniqueFileNames = new Set();
         for (let tagIdx = BigInt(0); tagIdx < totalTags; tagIdx++) {
-            const fileName = generatePath(tagIdx, time, [dataDirectory]);//`${timePartitionAlgo(tagIdx)}-${timePartitionAlgo(time)}.wal`;
+            const fileName = generatePath(tagIdx, time, [path.join(dataDirectory, testId)]);//`${timePartitionAlgo(tagIdx)}-${timePartitionAlgo(time)}.wal`;
             if (purgeFileName !== fileName) {
                 if (purgeFileName !== "") {
                     uniqueFileNames.add(purgeFileName);
@@ -71,7 +71,7 @@ function write() {
 
 function read() {
     const st = Date.now();
-    const filePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/1MillTags60Seconds/0-0/raw.hb");
+    const filePath = path.join(dataDirectory, "1MillTags60Seconds/0-0/raw.hb");
     const store = new FileStore(filePath, 4096);
     const cache = new LocalCache();
     let blockCounter = 0;
@@ -125,9 +125,9 @@ function read() {
 //==================================================================================Defrag==========================================================================
 function defrag() {
     const st = Date.now();
-    const sourcefilePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/1MillTags60Seconds/0-0/raw.hb");
+    const sourcefilePath = path.join(dataDirectory, "1MillTags60Seconds/0-0/raw.hb");
     const source = new FileStore(sourcefilePath, 4096);
-    const destinationfilePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/1MillTags60Seconds/0-0/defrag.hb");
+    const destinationfilePath = path.join(dataDirectory, "1MillTags60Seconds/0-0/defrag.hb")
     const destination = new FileStore(destinationfilePath, 4096);
     const sourceCache = null//new LocalCache();
     const defragOffset = source.size();
