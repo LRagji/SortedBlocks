@@ -16,7 +16,8 @@
     "test": "npm run build && npm run test-run",
     "build": "(npm run clean-build || node -v) && tsc && npm run copy-files && npm run docs",
     "push": "npm whoami && npm version patch && npm test && cd ./dist && npm publish && cd .. && git push --tags",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "example-ts": "cd ./examples/timeseries && tsc && node dist/examples/timeseries/timeseries.js"
   },
   "repository": {
     "type": "git",

@@ -5,6 +5,8 @@ const testId = crypto.randomUUID();
 
 import { Version1SortedBlocks } from '../../source/sorted-blocks.js';
 import { FileStore } from './filestore.js';
+import { LocalCache } from "../../source/cache-proxy.js";
+const dataDirectory = path.join(__dirname, "../../../data/");
 
 function generatePayload(time: bigint, tagId: bigint, payload: Map<bigint, Buffer>): Map<bigint, Buffer> {
     //for(let tagIdx = 0n; tagIdx <totalTags; tagIdx++) {
@@ -20,7 +22,7 @@ function generatePayload(time: bigint, tagId: bigint, payload: Map<bigint, Buffe
 
 function purge(fileName: string, payload: Map<bigint, Buffer>) {
     const blockInfo = Buffer.from(JSON.stringify({ "dt": Date.now() }));
-    const store = new FileStore(path.join("./tests/examples/timeseries/data", testId, fileName));
+    const store = new FileStore(path.join(dataDirectory, testId, fileName));
     try {
         Version1SortedBlocks.serialize(store, blockInfo, payload);
     }
@@ -61,13 +63,14 @@ function write() {
 
 function read() {
     const st = Date.now();
-    const filePath = "tests/examples/timeseries/data/4c197082-043f-4ee9-a2d3-3540783ea9ba/0-0.wal";
+    const filePath = path.join(dataDirectory, "4c197082-043f-4ee9-a2d3-3540783ea9ba/0-0.wal");
     const store = new FileStore(filePath, 4096);
+    const cache = new LocalCache();
     //let block: null | Version1SortedBlocks = null;
     let blockCounter = 0;
     let offset = store.size();
     while (offset > 0) {
-        const block = Version1SortedBlocks.deserialize(store, offset);
+        const block = Version1SortedBlocks.deserialize(store, offset, cache);
         if (block != null) {
             const tagId = BigInt(200);
             const info = block.meta.blockInfo.toString();
