@@ -26,7 +26,7 @@ function purge(filePath: string, payload: Map<bigint, Buffer>) {
     }
     finally {
         store.close();
-        console.log(`Purged:${filePath} with ${payload.size} samples.`);
+        //console.log(`Purged:${filePath} with ${payload.size} samples.`);
     }
 }
 
@@ -39,16 +39,19 @@ function write() {
         const diskPart = parseInt(diskSelection(tagPart, BigInt(diskPaths.length)).toString(), 10);
         return path.join(diskPaths[diskPart], `${tagPart}-${timePart}`, `raw.hb`);
     }
-    const totalTags = BigInt(5999);
+    const totalTags = BigInt(1000000);
     const totalTime = BigInt(3600);
     let purgeFileName = "";
 
     const purgeAcc = new Map<bigint, Buffer>();
     for (let time = BigInt(0); time < totalTime; time++) {
+        const st = Date.now();
+        const uniqueFileNames = new Set();
         for (let tagIdx = BigInt(0); tagIdx < totalTags; tagIdx++) {
             const fileName = generatePath(tagIdx, time, [dataDirectory]);//`${timePartitionAlgo(tagIdx)}-${timePartitionAlgo(time)}.wal`;
             if (purgeFileName !== fileName) {
                 if (purgeFileName !== "") {
+                    uniqueFileNames.add(purgeFileName);
                     purge(purgeFileName, purgeAcc);
                 }
                 purgeFileName = fileName;
@@ -56,6 +59,7 @@ function write() {
             }
             generatePayload(time, tagIdx, purgeAcc);
         }
+        console.log(`${time}: ${Date.now() - st}ms Files:${uniqueFileNames.size}`);
     }
 
     if (purgeAcc.size > 0) {
@@ -67,20 +71,22 @@ function write() {
 
 function read() {
     const st = Date.now();
-    const filePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/4c0cab6d-2c0a-4745-9437-2556b848887e/0-0/raw.hb");
+    const filePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/1MillTags60Seconds/0-0/raw.hb");
     const store = new FileStore(filePath, 4096);
     const cache = new LocalCache();
-    //let block: null | Version1SortedBlocks = null;
     let blockCounter = 0;
     let offset = store.size();
     while (offset > 0) {
         const block = Version1SortedBlocks.deserialize(store, offset, cache);
         if (block != null) {
-            const tagId = BigInt(200);
+            const tagId = BigInt(128);
             const info = block.meta.blockInfo.toString();
             const serializedSample = block.get(tagId);
             if (serializedSample == null) {
-                throw new Error(`${info}: Key cannot be null`);
+                throw new Error(`Key:${tagId} cannot be null`);
+            }
+            if (info == null) {
+                throw new Error(`BlockInfo cannot be null`);
             }
             // const q2 = serializedSample.readBigUInt64BE(24);
             // const q1 = serializedSample.readBigUInt64BE(16);
@@ -101,7 +107,50 @@ function read() {
         acc.sum = acc.sum + e;
         return acc;
     }, { min: Number.MAX_SAFE_INTEGER, max: Number.MIN_SAFE_INTEGER, sum: 0 });
-    console.log(`Reading completed with ${blockCounter} blocks within ${elapsed}ms with OPS: Total:${readStats.sum} Max:${readStats.max} Min:${readStats.min} Avg:${(readStats.sum / stats.readOps.size).toFixed(2)} `);
+
+    //Stats
+    let logLine = "";
+    let totalBytes = 0;
+    offset = store.size();
+    cache.statistics().forEach((stats, weight) => {
+        logLine += `${weight}[${(stats.Bytes / Math.max(stats.Hits, 1)).toFixed(3)}]: Bytes:${stats.Bytes} Count:${stats.Count} Hits:${stats.Hits}\n`;
+        totalBytes += stats.Bytes;
+    });
+    console.log(`Reading completed with ${blockCounter} blocks within ${elapsed}ms with 
+    OPS: Total:${readStats.sum} Max:${readStats.max} Min:${readStats.min} Avg:${(readStats.sum / stats.readOps.size).toFixed(2)}
+    Cache:[${((totalBytes / offset) * 100).toFixed(2)}%] Memory:~${totalBytes}Bytes File:${offset}Bytes 
+    ${logLine}`);
 }
+
+//==================================================================================Defrag==========================================================================
+function defrag() {
+    const st = Date.now();
+    const sourcefilePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/1MillTags60Seconds/0-0/raw.hb");
+    const source = new FileStore(sourcefilePath, 4096);
+    const destinationfilePath = path.join("/Users/105050656/Documents/Git/Personal/sorted-blocks/examples/timeseries/data/1MillTags60Seconds/0-0/defrag.hb");
+    const destination = new FileStore(destinationfilePath, 4096);
+    const sourceCache = null//new LocalCache();
+    const defragOffset = source.size();
+    const valueReducer = (acc: Buffer | null, e: Buffer | null, info: Buffer | null): Buffer | null => {
+        if (acc != null && e != null) {
+            return Buffer.concat([acc, e]);
+        }
+        else {
+            return e;
+        }
+    };
+    const infoReducer = (acc: Buffer, e: Buffer): Buffer => {
+        const accContent = acc.toString() || JSON.stringify(["Defraged Info"]);
+        const accObject = JSON.parse(accContent) as string[];
+        accObject.push(e.toString());
+        return Buffer.from(JSON.stringify(accObject));
+    };
+    Version1SortedBlocks.defrag(source, defragOffset, destination, sourceCache, undefined, valueReducer, infoReducer);
+    const elapsed = Date.now() - st;
+    console.log(`Defrag completed within ${elapsed}ms of ${defragOffset}Bytes`);
+}
+
 //==================================================================================Execute==========================================================================
+//write();
 read();
+//defrag();

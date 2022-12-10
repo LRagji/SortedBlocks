@@ -12,17 +12,13 @@ interface IContextualCache {
 export class Version1SortedBlocks {
 
     //TODO:
-    // 1 Next block offset is missing.
+    // 1. Add compression? or should this to done app level within a key
     // 2. Change Terminology according to google sheet document.
     // 3. Move googlee sheet to Readme as md
-    // 3.5 Should we Keep IStore or ICursor impplemeentation?
     // 4. Think of a way to make this into KD Tree Multidimensional
-    // 5. Think of Caching Tree in Redis
-    // 6. Build a state machine to Read byte by byte and merge into API 
     // 7. Remove maxValueSizeInBytes from serialize
     // 8. What can be done to not keep on allocating Buffers for a million time in serialize command. 74GB
     // 9. Add validation for data hash via flag.
-    //10. reduce readiops from 9k in get.
     //11. Add option to validate entire data.
     //12. Failure Mode if we see SOP or EOP exact bytes in payload then we skip the entire segment :(
     private static readonly hashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
@@ -32,7 +28,6 @@ export class Version1SortedBlocks {
     private static readonly version = Uint8Array.from([1]);
     private static readonly maxBigInt = BigInt("18446744073709551615");
     private static readonly minBigInt = BigInt("0");
-
 
     public static serialize(appendOnlyStore: IAppendStore, blockInfo: Buffer, payload: Map<bigint, Buffer>, maxValueSizeInBytes = 1024): number {
 
@@ -263,13 +258,14 @@ export class Version1SortedBlocks {
     }
 
     public static defrag(source: IAppendStore, sourceOffset: number, destination: IAppendStore,
+        sourceCache: ICacheProxy | null = null,
         purgeCallback = (mergedBlocks: Map<bigint, Buffer>) => false,
         valueReduce = (reducedValue: Buffer | null, value: Buffer | null, blockInfo: Buffer | null): Buffer | null => null,
         blockInfoReduce = (mergedBlockinfo: Buffer, newblockInfo: Buffer) => Buffer.alloc(0)) {
         const blocks = new Array<Version1SortedBlocks>();
         let mergedBlockInfo = Buffer.alloc(0);
         while (sourceOffset > 0) {
-            const block = Version1SortedBlocks.deserialize(source, sourceOffset);
+            const block = Version1SortedBlocks.deserialize(source, sourceOffset, sourceCache);
             if (block != null) {
                 blocks.push(block);
                 sourceOffset = block.meta.nextBlockOffset;
@@ -286,20 +282,22 @@ export class Version1SortedBlocks {
                 let kvp = iterator.next();
                 while (!kvp.done) {
                     const key = kvp.value[0];
-                    const value = kvp.value[1];
-                    let mergedValue = blocks
-                        .map(b => b.get(key))
-                        .reduce((acc, e) => valueReduce(acc, e, block.meta.blockInfo), value);
-                    if (mergedBlock.has(key) === true) {
-                        mergedValue = valueReduce(mergedValue, mergedBlock.get(key) || null, null);
-                    }
-                    if (mergedValue != null) {
-                        mergedBlock.set(key, mergedValue);
-                    }
-                    processedKeys.add(key);
-                    if (purgeCallback(mergedBlock) === true) {
-                        Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));
-                        mergedBlock.clear();
+                    if (!processedKeys.has(key)) {
+                        const value = kvp.value[1];
+                        let mergedValue = blocks
+                            .map(b => b.get(key))
+                            .reduce((acc, e) => valueReduce(acc, e, block.meta.blockInfo), value);
+                        if (mergedBlock.has(key) === true) {
+                            mergedValue = valueReduce(mergedValue, mergedBlock.get(key) || null, null);
+                        }
+                        if (mergedValue != null) {
+                            mergedBlock.set(key, mergedValue);
+                        }
+                        processedKeys.add(key);
+                        if (purgeCallback(mergedBlock) === true) {
+                            Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));
+                            mergedBlock.clear();
+                        }
                     }
                     kvp = iterator.next();
                 }
@@ -309,6 +307,7 @@ export class Version1SortedBlocks {
             Version1SortedBlocks.serialize(destination, mergedBlockInfo, mergedBlock, Array.from(mergedBlock.values()).reduce((acc, e) => Math.max(acc, e.length), 0));
             mergedBlock.clear();
         }
+        if (sourceCache != null) sourceCache.clear();
     }
 
     private static cachedReverseReads(appendOnlyStore: IAppendStore, offset: number, cache: ICacheProxy | null = null, cacheProbability: number = 0): Buffer | null {
