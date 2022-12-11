@@ -28,6 +28,7 @@ export class MockedAppendStore implements IAppendStore {
         public diagnosticPrint: boolean = false) { }
 
     reverseRead(fromPosition: number): Buffer {
+        if (fromPosition >= this.store.length) return Buffer.alloc(0);
         const operationTimestamp = Date.now();
         const operationBucket = operationTimestamp - (operationTimestamp % 1000);
         let ops = this.readOPS.get(operationBucket) || 0;
@@ -41,7 +42,7 @@ export class MockedAppendStore implements IAppendStore {
         }
         const length = this.readCallback();
         const start = Math.max(0, fromPosition - length);
-        const data = this.store.subarray(start, fromPosition);
+        const data = this.store.subarray(start, (fromPosition + 1));
         if (this.diagnosticPrint === true) console.log(`read ${start} to ${fromPosition} len ${length}`);
         return data;
     }

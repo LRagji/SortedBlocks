@@ -59,7 +59,7 @@ while (modes.length > 0) {
             const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
             assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
             assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
@@ -80,7 +80,7 @@ while (modes.length > 0) {
             const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
 
             let retrivedValue = sortedBlock.get(BigInt(10));
@@ -99,7 +99,7 @@ while (modes.length > 0) {
             const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key1, value], [key2, value]]), value.length);
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
 
             let retrivedValue = sortedBlock.get(BigInt(110));
@@ -119,7 +119,7 @@ while (modes.length > 0) {
             }, 0);
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-            let scanFrom = mockStore.store.length;
+            let scanFrom = bytesWritten - 1;
             blocks.reverse().forEach((expectedBlockInfo, idx) => {
                 let sortedBlock = Version1SortedBlocks.deserialize(mockStore, scanFrom, mode.context.cache);
                 if (sortedBlock == null) assert.fail(`SortedBlock cannot be null for index:${idx}`);
@@ -143,7 +143,7 @@ while (modes.length > 0) {
             const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, new Map<bigint, Buffer>([[key, value]]), value.length);
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
             assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
             assert.strictEqual(sortedBlock.meta.keyRangeMax, key);
@@ -171,7 +171,7 @@ while (modes.length > 0) {
 
             const bytesWritten = Version1SortedBlocks.serialize(mockStore, blockInfoBuff, kvps);
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
-            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            const sortedBlock = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             if (sortedBlock == null) assert.fail("sortedBlock cannot be null");
             assert.strictEqual(sortedBlock.meta.storeId, mockStore.Id);
             assert.strictEqual(sortedBlock.meta.keyRangeMax, BigInt(numberOfSamples - 1));
@@ -217,7 +217,7 @@ while (modes.length > 0) {
             }
             assert.deepStrictEqual(bytesWritten, mockStore.store.length);
 
-            let block = Version1SortedBlocks.deserialize(mockStore, mockStore.store.length, mode.context.cache);
+            let block = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             while (expectedData.length > 0 && block != null) {
                 const cursor = block.iterate();
                 let result = cursor.next();
@@ -256,7 +256,7 @@ while (modes.length > 0) {
 
             const readKey = BigInt(353213);//BigInt(getRandomInt(0, numberOfValues)); //This can be any number to level field across modes i have to fix this to one or ops will vary.
             st = Date.now();
-            const block = Version1SortedBlocks.deserialize(mockStore, bytesWritten, mode.context.cache);
+            const block = Version1SortedBlocks.deserialize(mockStore, bytesWritten - 1, mode.context.cache);
             const actualValue = block?.get(readKey);
             elapsed = Date.now() - st;
             assert.notEqual(block, null);
