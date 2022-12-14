@@ -7,30 +7,37 @@ export enum CachePolicy {
     All//Should also cache values
 }
 
-export abstract class Block {
-    public readonly type: number = 0;
-    public readonly blockPosition: number = -1;
-    public readonly headerLength: number = -1;
-    public readonly bodyLength: number = -1;
-    public readonly storeId: string;
+export class Block {
+    public type: number = 0;
+    public blockPosition: number = -1;
+    public headerLength: number = -1;
+    public bodyLength: number = -1;
+    public store: IAppendStore | null = null;
 
-    constructor(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) {
+    public static form(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): Block {
         if (store == null) throw new Error(`Parameter "store" cannot be null or undefined.`);
         if (type == null || type < 0 || type > MaxUint32) throw new Error(`Parameter "type" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
         if (blockPosition == null || blockPosition < 0) throw new Error(`Parameter "blockPosition" cannot be null or undefined and has to be greater than 0.`);
         if (headerLength == null || headerLength < 0 || headerLength > MaxUint32) throw new Error(`Parameter "headerLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
         if (bodyLength == null || bodyLength < 0 || bodyLength > MaxUint32) throw new Error(`Parameter "bodyLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
-        this.storeId = store.id;
-        this.type = type;
-        this.blockPosition = blockPosition;
-        this.headerLength = headerLength;
-        this.bodyLength = bodyLength;
+        const returnObject = new Block();
+        returnObject.store = store;
+        returnObject.type = type;
+        returnObject.blockPosition = blockPosition;
+        returnObject.headerLength = headerLength;
+        returnObject.bodyLength = bodyLength;
+        return returnObject;
     }
-    public abstract header(): Buffer
 
-    public abstract body(): Buffer
-
-    public abstract merge(other: Block): Block
+    public header(): Buffer {
+        return this.store?.measuredRead(this.blockPosition, this.blockPosition + this.headerLength) || Buffer.alloc(0);
+    }
+    public body(): Buffer {
+        return this.store?.measuredRead(this.blockPosition + this.headerLength, this.blockPosition + this.headerLength + this.bodyLength) || Buffer.alloc(0);
+    }
+    public merge(other: Block): Block {
+        throw new Error("Method not implemented.");
+    }
 
 }
 
@@ -45,18 +52,6 @@ export abstract class Block {
 //     fromMap(kvps: Map<bigint, Buffer>): KVP
 // }
 
-export class Default extends Block {
-
-    public header(): Buffer {
-        throw new Error("Method not implemented.");
-    }
-    public body(): Buffer {
-        throw new Error("Method not implemented.");
-    }
-    public merge(other: Block): Block {
-        throw new Error("Method not implemented.");
-    }
-}
 export const MaxUint32 = 4294967295;
 
 export const SOB = Buffer.from("2321", "hex");//#!
@@ -75,7 +70,7 @@ export class Blocks {
     public append(block: Block): number {
         const blockBody = block.body();
         const blockHeader = block.header();
-        if (blockBody.length > MaxUint32) throw new Error(`Block serialized length cannot be more than ${MaxUint32}.`);
+        if (blockBody.length > MaxUint32) throw new Error(`Block body size cannot be more than ${MaxUint32}.`);
         if (blockHeader.length > MaxUint32) throw new Error(`Block header size cannot be more than ${MaxUint32}.`);
         if (block.type > MaxUint32 || block.type < this.systemBlocks) throw new Error(`Block type must be between ${this.systemBlocks} and ${MaxUint32}.`);
 
@@ -83,8 +78,8 @@ export class Blocks {
         preamble.writeUInt32BE(blockHeader.length);
         preamble.writeUInt32BE(blockBody.length, 4);
         preamble.writeUInt32BE(block.type, 8);
-        preamble.writeUint16BE(crc16(preamble.subarray(0, 12)), 12);
-        preamble.writeUint16BE(crc16(preamble.subarray(0, 12)), 14);
+        preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 12);
+        preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 14);
         preamble.writeUint8(SOB[0], 16);
         preamble.writeUint8(SOB[1], 17);
         const finalBuffer = Buffer.concat([blockBody, blockHeader, preamble]);
@@ -97,7 +92,7 @@ export class Blocks {
         this.storeReaderPosition = this.store.length;
         let accumulator = Buffer.alloc(0);
         while (this.storeReaderPosition > this.storeStartPosition) {
-            const reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
+            let reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
             if (reverserBuffer == null || reverserBuffer.length === 0) {
                 return;
             }
@@ -119,18 +114,20 @@ export class Blocks {
                         const blockHeaderLength = preamble.readInt32BE(0);
                         const blockBodyLength = preamble.readInt32BE(4);
                         const blockType = preamble.readInt32BE(8);
-                        const crc1 = preamble.readUint16BE(12);
-                        const crc2 = preamble.readUint16BE(14);
+                        const crc1 = preamble.readUInt16BE(12);
+                        const crc2 = preamble.readUInt16BE(14);
                         if (crc1 != crc2 && crc2 != crc16(preamble.subarray(0, 12))) {
                             continue;
                         }
                         //Construct
-                        const constructFunction = blockTypeFactory?.get(blockType) || ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) => new Default(store, type, blockPosition, headerLength, bodyLength));
+                        const constructFunction = blockTypeFactory?.get(blockType) || ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): Block => Block.form(store, type, blockPosition, headerLength, bodyLength));
                         block = constructFunction(this.store, blockType, absoluteMatchingIndex + this.preambleLength, blockHeaderLength, blockBodyLength);
                         if (this.cachePolicy != CachePolicy.None) {
                             this.cachedBlocks.set(absoluteMatchingIndex, block);
                         }
                     }
+                    matchingIndex = -1;
+                    reverserBuffer = Buffer.alloc(0);
                     this.storeReaderPosition = (absoluteMatchingIndex + this.preambleLength + block.headerLength + block.bodyLength);
                     //validate if its system block
                     if (block.type < this.systemBlocks) {

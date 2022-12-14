@@ -1,20 +1,4 @@
-import { IStore } from "../../source/index"
 import { IAppendStore } from '../../source/i-append-store';
-export class MockedStore implements IStore {
-
-    constructor(public store: string = "", public Id: string = Date.now().toString(), public OptimalBufferSize: number | undefined = undefined) { }
-
-    append(data: string): void {
-        this.store += data;
-    }
-    read(position: number, utf8CharactersToRead: number): string {
-        return this.store.substring(position, position + utf8CharactersToRead);
-    }
-    fetchCurrentSize(): number {
-        return this.store.length
-    }
-
-}
 
 export class MockedAppendStore implements IAppendStore {
 
@@ -24,8 +8,29 @@ export class MockedAppendStore implements IAppendStore {
     constructor(
         public store: Buffer = Buffer.alloc(0),
         public readCallback = () => 1,
-        public Id: string = Date.now().toString(),
+        public id: string = Date.now().toString(),
         public diagnosticPrint: boolean = false) { }
+
+    get length() {
+        return this.store.length;
+    }
+
+    measuredRead(from: number, to: number): Buffer | null {
+        let accumulator = Buffer.alloc(0);
+        let startPosition = from;
+        do {
+            let data: Buffer | null = this.reverseRead(startPosition);
+            if (data != null && data.length !== 0) {
+                accumulator = Buffer.concat([data, accumulator]);
+                startPosition -= data.length;
+            }
+            else if (data == null || data.length === 0) {
+                break;
+            }
+        }
+        while (startPosition > to)
+        return accumulator.subarray(accumulator.length - (to - from));
+    }
 
     reverseRead(fromPosition: number): Buffer {
         if (fromPosition >= this.store.length) return Buffer.alloc(0);

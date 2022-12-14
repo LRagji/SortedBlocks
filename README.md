@@ -47,14 +47,14 @@ This is the format used to append blocks in the store, where each block is forma
     </td>
     <td>
       <table>
-      <tr><td align="center" colspan="2"><b>Preamble-CRC</b></td></tr>
-      <tr><td>CRC-16|Byte[]</td><td>2Bytes</td></tr>
+      <tr><td align="center" colspan="2"><b>Preamble-CRC-16</b></td></tr>
+      <tr><td>UInt16BE</td><td>2Bytes</td></tr>
       </table>
     </td>
     <td>
       <table>
-      <tr><td align="center" colspan="2"><b>Preamble-CRC</b></td></tr>
-      <tr><td>CRC-16|Byte[]</td><td>2Bytes</td></tr>
+      <tr><td align="center" colspan="2"><b>Preamble-CRC-16</b></td></tr>
+      <tr><td>UInt16BE</td><td>2Bytes</td></tr>
       </table>
     </td>
     <td>
