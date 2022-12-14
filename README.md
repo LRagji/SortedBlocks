@@ -8,18 +8,62 @@ TODO:
 3. Should switch to binary reads instead of UTF8 to support compressed file being written.
 
 ## Append Format
-This is the format used to append blocks in the store is it formatted as follows.
+This is the format used to append blocks in the store, where each block is formatted as follows.
 <table>
-<tr><td colspan="6"><center>Block-Body </center></td></tr>
-<tr><td colspan="6"><center>Block-Header</center></td></tr>
-<tr>
-<td>Block-Header-Length-UInt32BE</td>
-<td>Block-Body-Length-UInt32BE</td>
-<td>Block-Type-UInt32BE</td>
-<td>Block-Header+Preamble Hash-16Bytes</td>
-<td>Block-Header+Block--16Bytes</td>
-<td>Block-Header+Preamble Hash-16Bytes</td>
-</tr>
+  <tr border="1px solid black" >
+    <td align="center" colspan="6">
+      <table>
+      <tr><td align="center" colspan="2"><b>Block-Body</b></td></tr>
+      <tr><td>Byte[]</td><td><4294967295Bytes</td></tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="6">
+      <table>
+      <tr><td align="center" colspan="2"><b>Block-Header</b></td></tr>
+      <tr><td>Byte[]</td><td><4294967295Bytes</td></tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <table>
+      <tr><td align="center" colspan="2"><b>Block-Header-Length</b></td></tr>
+      <tr><td>UInt32BE</td><td>4Bytes</td></tr>
+      </table>
+    </td>
+    <td>
+      <table>
+      <tr><td align="center" colspan="2"><b>Block-Body-Length</b></td></tr>
+      <tr><td>UInt32BE</td><td>4Bytes</td></tr>
+      </table>
+    </td>
+    <td>
+      <table>
+      <tr><td align="center" colspan="2"><b>Block-Type</b></td></tr>
+      <tr><td>UInt32BE</td><td>4Bytes</td></tr>
+      </table>
+    </td>
+    <td>
+      <table>
+      <tr><td align="center" colspan="2"><b>Preamble-CRC</b></td></tr>
+      <tr><td>CRC-16|Byte[]</td><td>2Bytes</td></tr>
+      </table>
+    </td>
+    <td>
+      <table>
+      <tr><td align="center" colspan="2"><b>Preamble-CRC</b></td></tr>
+      <tr><td>CRC-16|Byte[]</td><td>2Bytes</td></tr>
+      </table>
+    </td>
+    <td>
+      <table>
+      <tr><td align="center" colspan="2"><b>SOB</b></td></tr>
+      <tr><td>0x23,0x21(#!)</td><td>2Bytes</td></tr>
+      </table>
+    </td>
+  </tr>
 </table>
 
 ## Format

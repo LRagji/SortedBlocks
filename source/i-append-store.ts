@@ -1,5 +1,7 @@
 export interface IAppendStore {
-    Id: string;
+    id: string;
+    length: number;
     append(data: Buffer): void;
-    reverseRead(fromPosition: number): Buffer | null
+    reverseRead(fromPosition: number): Buffer | null;
+    measuredRead(from: number, to: number): Buffer | null;
 }

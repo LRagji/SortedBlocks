@@ -1,82 +1,157 @@
 import { IAppendStore } from "./i-append-store";
-import crypto from 'node:crypto';
+import crc16 from 'crc/calculators/crc16';
 
-export enum CacheStrategy {
+export enum CachePolicy {
     Default, //Should only cache indexes
     None, //Clear cache after every call
     All//Should also cache values
 }
 
-export interface IBlock {
-    type: number;
-    header: Buffer,
-    bodyStartIndex: number,
-    startIndex: number,
-    endIndex: number,
-    storeId: string,
-    merge(another: IBlock): IBlock,
-    toBuffer(): Buffer
-    fromStore(store: IAppendStore): IBlock
+export abstract class Block {
+    public readonly type: number = 0;
+    public readonly blockPosition: number = -1;
+    public readonly headerLength: number = -1;
+    public readonly bodyLength: number = -1;
+    public readonly storeId: string;
+
+    constructor(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) {
+        if (store == null) throw new Error(`Parameter "store" cannot be null or undefined.`);
+        if (type == null || type < 0 || type > MaxUint32) throw new Error(`Parameter "type" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
+        if (blockPosition == null || blockPosition < 0) throw new Error(`Parameter "blockPosition" cannot be null or undefined and has to be greater than 0.`);
+        if (headerLength == null || headerLength < 0 || headerLength > MaxUint32) throw new Error(`Parameter "headerLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
+        if (bodyLength == null || bodyLength < 0 || bodyLength > MaxUint32) throw new Error(`Parameter "bodyLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
+        this.storeId = store.id;
+        this.type = type;
+        this.blockPosition = blockPosition;
+        this.headerLength = headerLength;
+        this.bodyLength = bodyLength;
+    }
+    public abstract header(): Buffer
+
+    public abstract body(): Buffer
+
+    public abstract merge(other: Block): Block
+
 }
 
-export interface KVP extends IBlock {
-    version: number,
-    minKey: number,
-    maxKey: number,
-    integrityVerified: boolean,
-    index: Map<bigint, [startIndex: number, endIndex: number]>,
-    get(key: bigint): Buffer
-    iterate(ascending: boolean): IterableIterator<[key: bigint, value: Buffer]>,
-    fromMap(kvps: Map<bigint, Buffer>): KVP
-}
+// export interface KVP extends IBlock {
+//     version: number,
+//     minKey: number,
+//     maxKey: number,
+//     integrityVerified: boolean,
+//     index: Map<bigint, [startIndex: number, endIndex: number]>,
+//     get(key: bigint): Buffer
+//     iterate(ascending: boolean): IterableIterator<[key: bigint, value: Buffer]>,
+//     fromMap(kvps: Map<bigint, Buffer>): KVP
+// }
 
-export interface Defrag extends IBlock {
-    DefraggedStart: number
+export class Default extends Block {
+
+    public header(): Buffer {
+        throw new Error("Method not implemented.");
+    }
+    public body(): Buffer {
+        throw new Error("Method not implemented.");
+    }
+    public merge(other: Block): Block {
+        throw new Error("Method not implemented.");
+    }
 }
 export const MaxUint32 = 4294967295;
-export const HashResolver = (serializedData: Buffer) => crypto.createHash('md5').update(serializedData).digest();
-export const SOB = HashResolver(Buffer.from("MAGICSEQUENCE"));
+
+export const SOB = Buffer.from("2321", "hex");//#!
 
 export class Blocks {
 
-    public readonly cachedBlocks = new Array<IBlock>();
+    public readonly cachedBlocks = new Map<number, Block>();
 
-    private sourceParsedIndex: number = -1;
-    private sourceIndexToStopAt: number = 0;
-    private readonly source: IAppendStore;
-    private readonly cacheStrategy: CacheStrategy;
+    private storeReaderPosition: number = -1;
+    private storeStartPosition: number = 0;
+    private readonly store: IAppendStore;
+    private readonly cachePolicy: CachePolicy;
+    private readonly systemBlocks = 100;
+    private readonly preambleLength = 18;
 
-    public append(block: IBlock): number {
-        const serialized = block.toBuffer();
-        if (serialized.length > MaxUint32) throw new Error(`Block serialized length cannot be more than ${MaxUint32}.`);
-        const header = block.header;
-        if (header.length > MaxUint32) throw new Error(`Block header size cannot be more than ${MaxUint32}.`);
-        if (block.type > MaxUint32 || block.type < 0) throw new Error(`Block type must be between O and ${MaxUint32}.`);
+    public append(block: Block): number {
+        const blockBody = block.body();
+        const blockHeader = block.header();
+        if (blockBody.length > MaxUint32) throw new Error(`Block serialized length cannot be more than ${MaxUint32}.`);
+        if (blockHeader.length > MaxUint32) throw new Error(`Block header size cannot be more than ${MaxUint32}.`);
+        if (block.type > MaxUint32 || block.type < this.systemBlocks) throw new Error(`Block type must be between ${this.systemBlocks} and ${MaxUint32}.`);
 
-        const headerBuff = Buffer.concat([header, Buffer.alloc(4), Buffer.alloc(4), Buffer.alloc(4)]);
-        headerBuff.writeUInt32BE(header.length, header.length);
-        headerBuff.writeUInt32BE(serialized.length, header.length + 4);
-        headerBuff.writeUInt32BE(block.type, header.length + 8);
-        const headerHash = HashResolver(headerBuff);
-        const headerBuffLength = Buffer.alloc(4);
-        headerBuffLength.writeUInt32BE(headerBuff.length);
-        const preambleBuff = Buffer.concat([headerHash, headerBuffLength, headerHash, SOB]);
-        const finalBuffer = Buffer.concat([serialized, preambleBuff]);
+        const preamble = Buffer.alloc(18);
+        preamble.writeUInt32BE(blockHeader.length);
+        preamble.writeUInt32BE(blockBody.length, 4);
+        preamble.writeUInt32BE(block.type, 8);
+        preamble.writeUint16BE(crc16(preamble.subarray(0, 12)), 12);
+        preamble.writeUint16BE(crc16(preamble.subarray(0, 12)), 14);
+        preamble.writeUint8(SOB[0], 16);
+        preamble.writeUint8(SOB[1], 17);
+        const finalBuffer = Buffer.concat([blockBody, blockHeader, preamble]);
 
-        this.source.append(finalBuffer);
+        this.store.append(finalBuffer);
         return finalBuffer.length;
     }
 
-    public * iterateBlocks(validateIntegrity: boolean = false): Generator<IBlock> {
-
+    public * iterate(blockTypeFactory: Map<number, ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) => Block)> | undefined = undefined): Generator<[Block, number]> {
+        this.storeReaderPosition = this.store.length;
+        let accumulator = Buffer.alloc(0);
+        while (this.storeReaderPosition > this.storeStartPosition) {
+            const reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
+            if (reverserBuffer == null || reverserBuffer.length === 0) {
+                return;
+            }
+            accumulator = Buffer.concat([reverserBuffer, accumulator.subarray(0, SOB.length + 1)]);
+            let matchingIndex = accumulator.length;
+            do {
+                matchingIndex = accumulator.lastIndexOf(SOB[SOB.length - 1], (matchingIndex - 1))
+                if (matchingIndex !== -1
+                    && (matchingIndex - (SOB.length - 1)) >= 0
+                    && SOB.reverse().reduce((a, e, idx) => a && e === accumulator[matchingIndex - idx], true)) {
+                    const absoluteMatchingIndex = (this.storeReaderPosition - reverserBuffer.length) + matchingIndex;
+                    let block = this.cachedBlocks.get(absoluteMatchingIndex);
+                    if (block == null) {
+                        //construct & invoke
+                        const preamble = this.store.measuredRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
+                        if (preamble == null || preamble.length !== this.preambleLength) {
+                            return;
+                        }
+                        const blockHeaderLength = preamble.readInt32BE(0);
+                        const blockBodyLength = preamble.readInt32BE(4);
+                        const blockType = preamble.readInt32BE(8);
+                        const crc1 = preamble.readUint16BE(12);
+                        const crc2 = preamble.readUint16BE(14);
+                        if (crc1 != crc2 && crc2 != crc16(preamble.subarray(0, 12))) {
+                            continue;
+                        }
+                        //Construct
+                        const constructFunction = blockTypeFactory?.get(blockType) || ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) => new Default(store, type, blockPosition, headerLength, bodyLength));
+                        block = constructFunction(this.store, blockType, absoluteMatchingIndex + this.preambleLength, blockHeaderLength, blockBodyLength);
+                        if (this.cachePolicy != CachePolicy.None) {
+                            this.cachedBlocks.set(absoluteMatchingIndex, block);
+                        }
+                    }
+                    this.storeReaderPosition = (absoluteMatchingIndex + this.preambleLength + block.headerLength + block.bodyLength);
+                    //validate if its system block
+                    if (block.type < this.systemBlocks) {
+                        //do system level changes
+                    }
+                    else {
+                        yield ([block, this.storeReaderPosition - this.storeStartPosition]);
+                    }
+                }
+            }
+            while (matchingIndex > 0)
+            this.storeReaderPosition -= reverserBuffer.length;
+        }
     }
 
     public defrag() {
 
     }
 
-    constructor(source: IAppendStore, cacheStrategy: CacheStrategy = CacheStrategy.Default) {
-        this.source = source;
-        this.cacheStrategy = cacheStrategy;
+    constructor(store: IAppendStore, cachePolicy: CachePolicy = CachePolicy.Default) {
+        this.store = store;
+        this.cachePolicy = cachePolicy;
     }
 }
