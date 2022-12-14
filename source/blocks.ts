@@ -30,10 +30,10 @@ export class Block {
     }
 
     public header(): Buffer {
-        return this.store?.measuredRead(this.blockPosition, this.blockPosition + this.headerLength) || Buffer.alloc(0);
+        return this.store?.measuredReverseRead(this.blockPosition, this.blockPosition - this.headerLength) || Buffer.alloc(0);
     }
     public body(): Buffer {
-        return this.store?.measuredRead(this.blockPosition + this.headerLength, this.blockPosition + this.headerLength + this.bodyLength) || Buffer.alloc(0);
+        return this.store?.measuredReverseRead((this.blockPosition - this.headerLength), this.blockPosition - (this.headerLength + this.bodyLength)) || Buffer.alloc(0);
     }
     public merge(other: Block): Block {
         throw new Error("Method not implemented.");
@@ -89,7 +89,7 @@ export class Blocks {
     }
 
     public * iterate(blockTypeFactory: Map<number, ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) => Block)> | undefined = undefined): Generator<[Block, number]> {
-        this.storeReaderPosition = this.store.length;
+        this.storeReaderPosition = this.store.length - 1;
         let accumulator = Buffer.alloc(0);
         while (this.storeReaderPosition > this.storeStartPosition) {
             let reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
@@ -103,11 +103,11 @@ export class Blocks {
                 if (matchingIndex !== -1
                     && (matchingIndex - (SOB.length - 1)) >= 0
                     && SOB.reverse().reduce((a, e, idx) => a && e === accumulator[matchingIndex - idx], true)) {
-                    const absoluteMatchingIndex = (this.storeReaderPosition - reverserBuffer.length) + matchingIndex;
+                    const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
                     let block = this.cachedBlocks.get(absoluteMatchingIndex);
                     if (block == null) {
-                        //construct & invoke
-                        const preamble = this.store.measuredRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
+                        //construct & invoke 
+                        const preamble = this.store.measuredReverseRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
                         if (preamble == null || preamble.length !== this.preambleLength) {
                             return;
                         }
@@ -121,20 +121,20 @@ export class Blocks {
                         }
                         //Construct
                         const constructFunction = blockTypeFactory?.get(blockType) || ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): Block => Block.form(store, type, blockPosition, headerLength, bodyLength));
-                        block = constructFunction(this.store, blockType, absoluteMatchingIndex + this.preambleLength, blockHeaderLength, blockBodyLength);
+                        block = constructFunction(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
                         if (this.cachePolicy != CachePolicy.None) {
                             this.cachedBlocks.set(absoluteMatchingIndex, block);
                         }
                     }
                     matchingIndex = -1;
                     reverserBuffer = Buffer.alloc(0);
-                    this.storeReaderPosition = (absoluteMatchingIndex + this.preambleLength + block.headerLength + block.bodyLength);
+                    this.storeReaderPosition = (absoluteMatchingIndex - (this.preambleLength + block.headerLength + block.bodyLength));
                     //validate if its system block
                     if (block.type < this.systemBlocks) {
                         //do system level changes
                     }
                     else {
-                        yield ([block, this.storeReaderPosition - this.storeStartPosition]);
+                        yield ([block, Math.max(this.storeReaderPosition - this.storeStartPosition, this.storeStartPosition)]);
                     }
                 }
             }

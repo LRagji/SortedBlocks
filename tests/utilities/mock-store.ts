@@ -15,9 +15,10 @@ export class MockedAppendStore implements IAppendStore {
         return this.store.length;
     }
 
-    measuredRead(from: number, to: number): Buffer | null {
+    measuredReverseRead(fromInclusive: number, toExclusive: number): Buffer | null {
         let accumulator = Buffer.alloc(0);
-        let startPosition = from;
+        const lengthRequired = (fromInclusive - toExclusive);
+        let startPosition = fromInclusive;
         do {
             let data: Buffer | null = this.reverseRead(startPosition);
             if (data != null && data.length !== 0) {
@@ -28,12 +29,13 @@ export class MockedAppendStore implements IAppendStore {
                 break;
             }
         }
-        while (startPosition > to)
-        return accumulator.subarray(accumulator.length - (to - from));
+        while (lengthRequired > accumulator.length)
+        return accumulator.subarray(accumulator.length - lengthRequired);
     }
 
-    reverseRead(fromPosition: number): Buffer {
-        if (fromPosition >= this.store.length) return Buffer.alloc(0);
+    reverseRead(fromInclusive: number): Buffer {
+        if (fromInclusive >= this.store.length) return Buffer.alloc(0);
+        //console.log(`RR:${fromPosition}`);
         const operationTimestamp = Date.now();
         const operationBucket = operationTimestamp - (operationTimestamp % 1000);
         let ops = this.readOPS.get(operationBucket) || 0;
@@ -42,13 +44,13 @@ export class MockedAppendStore implements IAppendStore {
         const windowStart = operationBucket - 15000;
         this.readOPS.forEach((v, k) => k < windowStart ? this.readOPS.delete(k) : null);
 
-        if (fromPosition < 0) {
-            throw new Error(`Param "offset" cannot be lesser than 0.`);
+        if (fromInclusive < 0) {
+            throw new Error(`Param "fromPosition" cannot be lesser than 0.`);
         }
         const length = this.readCallback();
-        const start = Math.max(0, fromPosition - length);
-        const data = this.store.subarray(start, (fromPosition + 1));
-        if (this.diagnosticPrint === true) console.log(`read ${start} to ${fromPosition} len ${length}`);
+        const start = Math.max(0, fromInclusive - length);
+        const data = this.store.subarray(start, (fromInclusive + 1));
+        if (this.diagnosticPrint === true) console.log(`read ${start} to ${fromInclusive} len ${length}`);
         return data;
     }
 

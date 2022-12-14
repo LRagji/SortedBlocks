@@ -21,7 +21,7 @@ describe(`Blocks append specs`, () => {
     it('should be assembling the packet in expected format.', async () => {
         const target = new Blocks(mockStore);
         const body = Buffer.from("Body"), header = Buffer.from("Header");
-        const payload = new TestBlock(body, header);
+        const payload = new TestBlock(body, header, mockStore);
         const bytesAppended = target.append(payload);
 
         const preamble = Buffer.alloc(18);
@@ -42,7 +42,7 @@ describe(`Blocks append specs`, () => {
     it('should append for zero length header and body', async () => {
         const target = new Blocks(mockStore);
         const body = Buffer.alloc(0), header = Buffer.alloc(0);
-        const payload = new TestBlock(body, header);
+        const payload = new TestBlock(body, header, mockStore);
         const bytesAppended = target.append(payload);
 
         const preamble = Buffer.alloc(18);
@@ -64,7 +64,7 @@ describe(`Blocks append specs`, () => {
         const target = new Blocks(mockStore);
         let body = Buffer.alloc(0), header = Buffer.alloc(0);
         sinon.stub(body, "length").value(MaxUint32 + 1);
-        const payload = new TestBlock(body, header);
+        const payload = new TestBlock(body, header, mockStore);
         assert.throws(() => target.append(payload), new Error(`Block body size cannot be more than ${MaxUint32}.`));
     })
 
@@ -72,14 +72,14 @@ describe(`Blocks append specs`, () => {
         const target = new Blocks(mockStore);
         let body = Buffer.alloc(0), header = Buffer.alloc(0);
         sinon.stub(header, "length").value(MaxUint32 + 1);
-        const payload = new TestBlock(body, header);
+        const payload = new TestBlock(body, header, mockStore);
         assert.throws(() => target.append(payload), new Error(`Block header size cannot be more than ${MaxUint32}.`));
     })
 
     it('should not allow appends for system blocks 0 to 99', async () => {
         const target = new Blocks(mockStore);
         let body = Buffer.alloc(0), header = Buffer.alloc(0);
-        const payload = new TestBlock(body, header);
+        const payload = new TestBlock(body, header, mockStore);
         sinon.stub(payload, "type").value(0);
         assert.throws(() => target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
         sinon.stub(payload, "type").value(99);
