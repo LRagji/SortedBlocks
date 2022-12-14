@@ -7,6 +7,21 @@ TODO:
 2. Need to switch to 1 byte search or start of header rather than window based as the start of header can fall on either edges of the window reads being made.
 3. Should switch to binary reads instead of UTF8 to support compressed file being written.
 
+## Append Format
+This is the format used to append blocks in the store is it formatted as follows.
+<table>
+<tr><td colspan="6"><center>Block-Body </center></td></tr>
+<tr><td colspan="6"><center>Block-Header</center></td></tr>
+<tr>
+<td>Block-Header-Length-UInt32BE</td>
+<td>Block-Body-Length-UInt32BE</td>
+<td>Block-Type-UInt32BE</td>
+<td>Block-Header+Preamble Hash-16Bytes</td>
+<td>Block-Header+Block--16Bytes</td>
+<td>Block-Header+Preamble Hash-16Bytes</td>
+</tr>
+</table>
+
 ## Format
 The whole file is divided into blocks each block adheres to given below format. The concept of having multiple writters and append only is achived via blocks as each block is independent and has relative byte position internally no 2 writers can mess up the appending to the disk or cause corruption. Block are further divided into folloeing sections
 
@@ -14,7 +29,7 @@ The whole file is divided into blocks each block adheres to given below format. 
 2. **Header**: This section is hash verified and contains important key range filters and Block information that is saved with each block.
 3. **Block Index**: Place where section pointers are located, It is equivalent to index.
 4. **Block Data**: Place where actual key and its data is parked.
-
+<tr><td>Block-Body</td></tr>
 <table>
   <tr>
     <th>Field No</th>
