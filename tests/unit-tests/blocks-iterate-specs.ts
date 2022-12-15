@@ -1,9 +1,8 @@
 import * as assert from 'node:assert';
-import { SOB, Blocks, MaxUint32 } from '../../source/blocks';
+import { Block, Blocks, CachePolicy } from '../../source/blocks';
 import { MockedAppendStore } from '../utilities/mock-store';
 import { TestBlock } from '../utilities/test-block';
 import sinon, { SinonSpiedInstance } from 'sinon';
-import crc16 from 'crc/calculators/crc16';
 
 
 describe(`Blocks iterate specs`, () => {
@@ -18,7 +17,7 @@ describe(`Blocks iterate specs`, () => {
         sandbox.restore();
     });
 
-    it('should be able to read back appended blocks.', async () => {
+    it('should be able to read back appended blocks of fixed size.', async () => {
         const target = new Blocks(mockStore);
         const body = Buffer.from("Body"), header = Buffer.from("Header");
         const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
@@ -30,7 +29,41 @@ describe(`Blocks iterate specs`, () => {
 
         const cursor = target.iterate();
         let previousRemainingBytes = bytesAppended;
-        let counter = 1;
+        let counter = payloads.length;
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            const remainingBytes = result.value[1];
+            const expected = payloads.pop();
+            assert.equal(actual instanceof Block, true);
+            assert.equal(actual instanceof TestBlock, false);
+            assert.equal(remainingBytes < previousRemainingBytes, true);
+            previousRemainingBytes = remainingBytes;
+            assert.notEqual(expected, undefined);
+            assert.notEqual(actual, undefined);
+            assert.equal(actual.type, expected?.type);
+            assert.deepStrictEqual(actual.body(), expected?.body());
+            assert.deepStrictEqual(actual.header(), expected?.header());
+            assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
+            assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
+            assert.deepStrictEqual(actual.blockPosition, (bytesPerBlock * counter) - (preambleByteLength + 1));
+            assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
+            result = cursor.next();
+            counter--;
+        }
+        assert.equal(payloads.length, 0);
+    });
+
+    it('should be able to read back appended blocks of arbitary size.', async () => {
+        const target = new Blocks(mockStore);
+        const payloads = Array.from({ length: 200 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));
+
+        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
+
+        const cursor = target.iterate();
+        let previousRemainingBytes = bytesAppended;
+        let counter = payloads.length;
         let result = cursor.next();
         while (!result.done) {
             const actual = result.value[0];
@@ -45,60 +78,194 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.header(), expected?.header());
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
-            assert.deepStrictEqual(actual.blockPosition, ((bytesPerBlock - preambleByteLength) * counter) - 1);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
             result = cursor.next();
-            counter++;
+            counter--;
         }
         assert.equal(payloads.length, 0);
     });
-    //reading from location where bytes dont exists
 
-    // it('should append for zero length header and body', async () => {
-    //     const target = new Blocks(mockStore);
-    //     const body = Buffer.alloc(0), header = Buffer.alloc(0);
-    //     const payload = new TestBlock(body, header);
-    //     const bytesAppended = target.append(payload);
+    it('should be able to read null if underlying buffer input is empty.', async () => {
+        const target = new Blocks(mockStore);
+        const cursor = target.iterate();
+        let counter = 0;
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            assert.notEqual(actual, undefined);
+            result = cursor.next();
+            counter++;
+        }
+        assert.equal(counter, 0);
+    });
 
-    //     const preamble = Buffer.alloc(18);
-    //     preamble.writeUInt32BE(header.length);
-    //     preamble.writeUInt32BE(body.length, 4);
-    //     preamble.writeUInt32BE(payload.type, 8);
-    //     preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 12);
-    //     preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 14);
-    //     preamble.writeUint8(SOB[0], 16);
-    //     preamble.writeUint8(SOB[1], 17);
-    //     const expectedBuffer = Buffer.concat([body, header, preamble]);
+    it('should be able to read back appended blocks even when buffer has garbage containing SOB.', async () => {
+        const target = new Blocks(mockStore);
+        const body = Buffer.from("Body"), header = Buffer.from("Header");
+        const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
 
-    //     assert.strictEqual(mockStore.store.length, bytesAppended);
-    //     assert.strictEqual(mockStore.store.length, expectedBuffer.length);
-    //     assert.strictEqual(mockStore.append.calledOnceWith(expectedBuffer), true);
-    // });
+        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
 
-    // it('should not allow body greater than 4294967295', async () => {
-    //     const target = new Blocks(mockStore);
-    //     let body = Buffer.alloc(0), header = Buffer.alloc(0);
-    //     sinon.stub(body, "length").value(MaxUint32 + 1);
-    //     const payload = new TestBlock(body, header);
-    //     assert.throws(() => target.append(payload), new Error(`Block body size cannot be more than ${MaxUint32}.`));
-    // })
+        mockStore.store = Buffer.concat([Buffer.from("I am #!pre Garbage#!"), mockStore.store, Buffer.from("I am #!post Garbage#!")]);
 
-    // it('should not allow header greater than 4294967295', async () => {
-    //     const target = new Blocks(mockStore);
-    //     let body = Buffer.alloc(0), header = Buffer.alloc(0);
-    //     sinon.stub(header, "length").value(MaxUint32 + 1);
-    //     const payload = new TestBlock(body, header);
-    //     assert.throws(() => target.append(payload), new Error(`Block header size cannot be more than ${MaxUint32}.`));
-    // })
+        const cursor = target.iterate();
+        let previousRemainingBytes = bytesAppended;
+        let counter = payloads.length;
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            const remainingBytes = result.value[1];
+            const expected = payloads.pop();
+            assert.equal(remainingBytes < previousRemainingBytes, true);
+            previousRemainingBytes = remainingBytes;
+            assert.notEqual(expected, undefined);
+            assert.notEqual(actual, undefined);
+            assert.equal(actual.type, expected?.type);
+            assert.deepStrictEqual(actual.body(), expected?.body());
+            assert.deepStrictEqual(actual.header(), expected?.header());
+            assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
+            assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
+            assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
+            result = cursor.next();
+            counter--;
+        }
+        assert.equal(payloads.length, 0);
+    });
 
-    // it('should not allow appends for system blocks 0 to 99', async () => {
-    //     const target = new Blocks(mockStore);
-    //     let body = Buffer.alloc(0), header = Buffer.alloc(0);
-    //     const payload = new TestBlock(body, header);
-    //     sinon.stub(payload, "type").value(0);
-    //     assert.throws(() => target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
-    //     sinon.stub(payload, "type").value(99);
-    //     assert.throws(() => target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
-    // })
+    it('should cache already read blocks with default cache policy', async () => {
+        const target = new Blocks(mockStore);
+        const body = Buffer.from("Body"), header = Buffer.from("Header");
+        const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
+        const preambleByteLength = 18;
+
+        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
+
+        let actualBlocks = new Map<number, Block>();
+        const cursor = target.iterate();
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            actualBlocks.set(actual.blockPosition + preambleByteLength, actual);
+            result = cursor.next();
+        }
+        assert.equal(actualBlocks.size, target.cachedBlocks.size);
+        assert.deepStrictEqual(Array.from(actualBlocks.keys()), Array.from(target.cachedBlocks.keys()));
+        assert.deepStrictEqual(Array.from(actualBlocks.values()), Array.from(target.cachedBlocks.values()));
+    });
+
+    it('should not cache already read blocks with none cache policy', async () => {
+        const target = new Blocks(mockStore, CachePolicy.None);
+        const body = Buffer.from("Body"), header = Buffer.from("Header");
+        const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
+        const preambleByteLength = 18;
+
+        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
+
+        let actualBlocks = new Map<number, Block>();
+        const cursor = target.iterate();
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            actualBlocks.set(actual.blockPosition + preambleByteLength, actual);
+            result = cursor.next();
+        }
+        assert.equal(actualBlocks.size, payloads.length);
+        assert.equal(target.cachedBlocks.size, 0);
+    });
+
+    it('should be able to factory map for initializing the user defined block types.', async () => {
+        const target = new Blocks(mockStore);
+        const payloads = Array.from({ length: 200 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));
+
+        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
+
+        const cursor = target.iterate(new Map([[100, TestBlock.textBlockFrom]]));
+        let previousRemainingBytes = bytesAppended;
+        let counter = payloads.length;
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            assert.equal(actual instanceof TestBlock, true);
+            assert.equal(actual instanceof Block, true);
+            const remainingBytes = result.value[1];
+            const expected = payloads.pop();
+            assert.equal(remainingBytes < previousRemainingBytes, true);
+            previousRemainingBytes = remainingBytes;
+            assert.notEqual(expected, undefined);
+            assert.notEqual(actual, undefined);
+            assert.equal(actual.type, expected?.type);
+            assert.deepStrictEqual(actual.body(), expected?.body());
+            assert.deepStrictEqual(actual.header(), expected?.header());
+            assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
+            assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
+            assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
+            result = cursor.next();
+            counter--;
+        }
+        assert.equal(payloads.length, 0);
+    });
+
+    it('should be able to read back appended blocks of fixed size post multiple reads and appends.', async () => {
+        const target = new Blocks(mockStore);
+        const payloads = Array.from({ length: 3 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));;
+
+        let bytesAppended = target.append(payloads[0]);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
+
+        let cursor = target.iterate();
+        let previousRemainingBytes = bytesAppended;
+        let result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            const remainingBytes = result.value[1];
+            const expected = payloads[0];
+            assert.equal(actual instanceof Block, true);
+            assert.equal(actual instanceof TestBlock, false);
+            assert.equal(remainingBytes < previousRemainingBytes, true);
+            previousRemainingBytes = remainingBytes;
+            assert.notEqual(expected, undefined);
+            assert.notEqual(actual, undefined);
+            assert.equal(actual.type, expected?.type);
+            assert.deepStrictEqual(actual.body(), expected?.body());
+            assert.deepStrictEqual(actual.header(), expected?.header());
+            assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
+            assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
+            assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
+            result = cursor.next();
+        }
+        //assert.equal(payloads.length, 2);
+        const b = payloads.shift();
+        bytesAppended += payloads.reduce((acc, p) => acc + target.append(p), 0);
+        assert.strictEqual(mockStore.store.length, bytesAppended);
+        payloads.unshift(b as TestBlock);
+
+        cursor = target.iterate();
+        previousRemainingBytes = bytesAppended;
+        result = cursor.next();
+        while (!result.done) {
+            const actual = result.value[0];
+            const remainingBytes = result.value[1];
+            const expected = payloads.pop();
+            assert.equal(actual instanceof Block, true);
+            assert.equal(actual instanceof TestBlock, false);
+            assert.equal(remainingBytes < previousRemainingBytes, true);
+            previousRemainingBytes = remainingBytes;
+            assert.notEqual(expected, undefined);
+            assert.notEqual(actual, undefined);
+            assert.equal(actual.type, expected?.type);
+            assert.deepStrictEqual(actual.body(), expected?.body());
+            assert.deepStrictEqual(actual.header(), expected?.header());
+            assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
+            assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
+            assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
+            result = cursor.next();
+        }
+
+        assert.equal(payloads.length, 0);
+    });
 });
 

@@ -54,7 +54,6 @@ export class Block {
 
 export const MaxUint32 = 4294967295;
 
-export const SOB = Buffer.from("2321", "hex");//#!
 
 export class Blocks {
 
@@ -66,6 +65,7 @@ export class Blocks {
     private readonly cachePolicy: CachePolicy;
     private readonly systemBlocks = 100;
     private readonly preambleLength = 18;
+    public static readonly SOB = Buffer.from("2321", "hex");//#! 35 33
 
     public append(block: Block): number {
         const blockBody = block.body();
@@ -80,29 +80,30 @@ export class Blocks {
         preamble.writeUInt32BE(block.type, 8);
         preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 12);
         preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 14);
-        preamble.writeUint8(SOB[0], 16);
-        preamble.writeUint8(SOB[1], 17);
+        preamble.writeUint8(Blocks.SOB[0], 16);
+        preamble.writeUint8(Blocks.SOB[1], 17);
         const finalBuffer = Buffer.concat([blockBody, blockHeader, preamble]);
 
         this.store.append(finalBuffer);
         return finalBuffer.length;
     }
 
-    public * iterate(blockTypeFactory: Map<number, ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number) => Block)> | undefined = undefined): Generator<[Block, number]> {
+    public * iterate(blockTypeFactory: Map<number, typeof Block.form> | undefined = undefined): Generator<[Block, number]> {
         this.storeReaderPosition = this.store.length - 1;
         let accumulator = Buffer.alloc(0);
+        const SOBLastByte = Blocks.SOB[Blocks.SOB.length - 1];
         while (this.storeReaderPosition > this.storeStartPosition) {
             let reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
             if (reverserBuffer == null || reverserBuffer.length === 0) {
                 return;
             }
-            accumulator = Buffer.concat([reverserBuffer, accumulator.subarray(0, SOB.length + 1)]);
+            accumulator = Buffer.concat([reverserBuffer, accumulator.subarray(0, Blocks.SOB.length + 1)]);
             let matchingIndex = accumulator.length;
             do {
-                matchingIndex = accumulator.lastIndexOf(SOB[SOB.length - 1], (matchingIndex - 1))
+                matchingIndex = accumulator.lastIndexOf(SOBLastByte, (matchingIndex - 1))
                 if (matchingIndex !== -1
-                    && (matchingIndex - (SOB.length - 1)) >= 0
-                    && SOB.reverse().reduce((a, e, idx) => a && e === accumulator[matchingIndex - idx], true)) {
+                    && (matchingIndex - (Blocks.SOB.length - 1)) >= 0
+                    && Blocks.SOB.reduce((a, e, idx, arr) => a && e === accumulator[matchingIndex - ((arr.length - 1) - idx)], true)) {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
                     let block = this.cachedBlocks.get(absoluteMatchingIndex);
                     if (block == null) {
@@ -120,7 +121,7 @@ export class Blocks {
                             continue;
                         }
                         //Construct
-                        const constructFunction = blockTypeFactory?.get(blockType) || ((store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): Block => Block.form(store, type, blockPosition, headerLength, bodyLength));
+                        const constructFunction = blockTypeFactory?.get(blockType) || Block.form;
                         block = constructFunction(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
                         if (this.cachePolicy != CachePolicy.None) {
                             this.cachedBlocks.set(absoluteMatchingIndex, block);
@@ -128,6 +129,7 @@ export class Blocks {
                     }
                     matchingIndex = -1;
                     reverserBuffer = Buffer.alloc(0);
+                    accumulator = Buffer.alloc(0);
                     this.storeReaderPosition = (absoluteMatchingIndex - (this.preambleLength + block.headerLength + block.bodyLength));
                     //validate if its system block
                     if (block.type < this.systemBlocks) {

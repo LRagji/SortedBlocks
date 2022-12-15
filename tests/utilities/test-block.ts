@@ -16,4 +16,9 @@ export class TestBlock extends Block {
     public override body(): Buffer {
         return this.bodyBuff;
     }
+
+    public static textBlockFrom(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): TestBlock {
+        const b = Block.form(store, type, blockPosition, headerLength, bodyLength);
+        return new TestBlock(b.body(), b.header(), store);
+    }
 }

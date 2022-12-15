@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { SOB, Blocks, MaxUint32 } from '../../source/blocks';
+import { Blocks, MaxUint32 } from '../../source/blocks';
 import { MockedAppendStore } from '../utilities/mock-store';
 import { TestBlock } from '../utilities/test-block';
 import sinon, { SinonSpiedInstance } from 'sinon';
@@ -30,8 +30,8 @@ describe(`Blocks append specs`, () => {
         preamble.writeUInt32BE(payload.type, 8);
         preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 12);
         preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 14);
-        preamble.writeUint8(SOB[0], 16);
-        preamble.writeUint8(SOB[1], 17);
+        preamble.writeUint8(Blocks.SOB[0], 16);
+        preamble.writeUint8(Blocks.SOB[1], 17);
         const expectedBuffer = Buffer.concat([body, header, preamble]);
 
         assert.strictEqual(mockStore.store.length, bytesAppended);
@@ -51,8 +51,8 @@ describe(`Blocks append specs`, () => {
         preamble.writeUInt32BE(payload.type, 8);
         preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 12);
         preamble.writeUInt16BE(crc16(preamble.subarray(0, 12)), 14);
-        preamble.writeUint8(SOB[0], 16);
-        preamble.writeUint8(SOB[1], 17);
+        preamble.writeUint8(Blocks.SOB[0], 16);
+        preamble.writeUint8(Blocks.SOB[1], 17);
         const expectedBuffer = Buffer.concat([body, header, preamble]);
 
         assert.strictEqual(mockStore.store.length, bytesAppended);
