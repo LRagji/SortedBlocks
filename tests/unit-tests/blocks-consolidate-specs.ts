@@ -58,10 +58,10 @@ describe(`Blocks consolidate specs`, () => {
             counter--;
         }
         assert.equal(payloads.length, 0);
-        assert.equal(target.cachedBlocks.size, 3);
+        assert.equal(target.cacheContainer.length, 3);
 
         assert.strictEqual(target.consolidate(undefined, blockTypeFactory), true);
-        assert.equal(target.cachedBlocks.size, 0);
+        assert.equal(target.cacheContainer.length, 0);
         assert.equal(bytesAppended < mockStore.store.length, true);
 
         previousRemainingBytes = mockStore.store.length;

@@ -83,6 +83,32 @@ export class SkipBlock extends Block {
 
 }
 
+export interface IBlocksCache {
+    set(absolutePosition: number, block: Block): void;
+    get(absolutePosition: number): Block | undefined;
+    clear(before: number | undefined, after: number | undefined): void;
+    length: number;
+}
+
+export class LocalCache implements IBlocksCache {
+    public readonly cache = new Map<number, Block>();
+
+    public get length() {
+        return this.cache.size;
+    }
+
+    public set(absolutePosition: number, block: Block): void {
+        this.cache.set(absolutePosition, block);
+    }
+    public get(absolutePosition: number): Block | undefined {
+        return this.cache.get(absolutePosition);
+    }
+    public clear(before: number | undefined = undefined, after: number | undefined = undefined): void {
+        this.cache.clear();
+    }
+
+}
+
 // export interface KVP extends IBlock {
 //     version: number,
 //     minKey: number,
@@ -99,7 +125,7 @@ export const MaxUint32 = 4294967295;
 
 export class Blocks {
 
-    public readonly cachedBlocks = new Map<number, Block>();
+    public readonly cacheContainer: IBlocksCache;
     private readonly skipPositions = new Array<{ fromPositionInclusive: number, toPositionInclusive: number }>();//Should always be sorted in desc order of position
 
     private storeReaderPosition: number = -1;
@@ -110,6 +136,12 @@ export class Blocks {
     private readonly preambleLength = 18;
     public static readonly SOB = Buffer.from("2321", "hex");//#! 35 33
     private static readonly SystemBlockFactory = new Map<number, typeof Block.from>([[SystemBlockTypes.Consolidated, SkipBlock.from]])
+
+    constructor(store: IAppendStore, cachePolicy: CachePolicy = CachePolicy.Default, cacheContainer: IBlocksCache = new LocalCache()) {
+        this.store = store;
+        this.cachePolicy = cachePolicy;
+        this.cacheContainer = cacheContainer;
+    }
 
     public append(block: Block): number {
         if (block.type > MaxUint32 || block.type < this.systemBlocks) throw new Error(`Block type must be between ${this.systemBlocks} and ${MaxUint32}.`);
@@ -133,7 +165,7 @@ export class Blocks {
                     && (matchingIndex - (Blocks.SOB.length - 1)) >= 0
                     && Blocks.SOB.reduce((a, e, idx, arr) => a && e === accumulator[matchingIndex - ((arr.length - 1) - idx)], true)) {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
-                    let block = this.cachedBlocks.get(absoluteMatchingIndex);
+                    let block = this.cacheContainer.get(absoluteMatchingIndex);
                     let isBlockFromCache = true;
                     if (block == null) {
                         //construct & invoke 
@@ -156,7 +188,7 @@ export class Blocks {
                     const constructFunction = blockTypeFactory?.get(block.type) || Blocks.SystemBlockFactory.get(block.type) || Block.from;
                     block = constructFunction(block.store as IAppendStore, block.type, block.blockPosition, block.headerLength, block.bodyLength);
                     if (this.cachePolicy != CachePolicy.None || isBlockFromCache === true) {
-                        this.cachedBlocks.set(absoluteMatchingIndex, block);
+                        this.cacheContainer.set(absoluteMatchingIndex, block);
                     }
                     matchingIndex = -1;
                     reverserBuffer = Buffer.alloc(0);
@@ -212,11 +244,6 @@ export class Blocks {
         throw new Error("TBI");
     }
 
-    constructor(store: IAppendStore, cachePolicy: CachePolicy = CachePolicy.Default) {
-        this.store = store;
-        this.cachePolicy = cachePolicy;
-    }
-
     private handleSystemBlock(systemBlock: Block): void {
         switch (systemBlock.type) {
             case SystemBlockTypes.Consolidated:
@@ -267,6 +294,6 @@ export class Blocks {
         this.append(accumulator as Block);
         this.systemBlockAppend(skip);
         accumulator = null;
-        this.cachedBlocks.clear();
+        this.cacheContainer.clear(undefined, undefined);
     }
 }

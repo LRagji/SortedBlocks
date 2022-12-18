@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { Block, Blocks, CachePolicy } from '../../source/blocks';
+import { Block, Blocks, CachePolicy, LocalCache } from '../../source/blocks';
 import { MockedAppendStore } from '../utilities/mock-store';
 import { TestBlock } from '../utilities/test-block';
 import sinon, { SinonSpiedInstance } from 'sinon';
@@ -150,9 +150,9 @@ describe(`Blocks iterate specs`, () => {
             actualBlocks.set(actual.blockPosition + preambleByteLength, actual);
             result = cursor.next();
         }
-        assert.equal(actualBlocks.size, target.cachedBlocks.size);
-        assert.deepStrictEqual(Array.from(actualBlocks.keys()), Array.from(target.cachedBlocks.keys()));
-        assert.deepStrictEqual(Array.from(actualBlocks.values()), Array.from(target.cachedBlocks.values()));
+        assert.equal(actualBlocks.size, target.cacheContainer.length);
+        assert.deepStrictEqual(Array.from(actualBlocks.keys()), Array.from((target.cacheContainer as LocalCache).cache.keys()));
+        assert.deepStrictEqual(Array.from(actualBlocks.values()), Array.from((target.cacheContainer as LocalCache).cache.values()));
     });
 
     it('should not cache already read blocks with none cache policy', async () => {
@@ -173,7 +173,7 @@ describe(`Blocks iterate specs`, () => {
             result = cursor.next();
         }
         assert.equal(actualBlocks.size, payloads.length);
-        assert.equal(target.cachedBlocks.size, 0);
+        assert.equal(target.cacheContainer.length, 0);
     });
 
     it('should be able to factory map for initializing the user defined block types.', async () => {
