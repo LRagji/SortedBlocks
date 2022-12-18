@@ -9,31 +9,6 @@ export enum CachePolicy {
 enum SystemBlockTypes {
     Consolidated = 10,
 }
-
-export class BufferStore implements IAppendStore {
-
-    private internalBuffer = Buffer.alloc(0);
-
-    public get length() {
-        return this.internalBuffer.length;
-    }
-
-    constructor(public readonly id: string) { }
-
-    append(data: Buffer): void {
-        this.internalBuffer = Buffer.concat([this.internalBuffer, data]);
-    }
-
-    reverseRead(fromInclusivePosition: number): Buffer | null {
-        throw new Error("Method not implemented.");
-    }
-
-    measuredReverseRead(fromInclusivePosition: number, toExclusivePosition: number): Buffer | null {
-        throw new Error("Method not implemented.");
-    }
-
-}
-
 export class Block {
     public type: number = 0;
     public blockPosition: number = -1;
@@ -69,29 +44,41 @@ export class Block {
 }
 export class SkipBlock extends Block {
 
-    constructor(inclusivePositionFromSkip: bigint, inclusivePositionToSkip: bigint, id: string = Date.now().toString()) {
+    private readonly _header: Buffer;
+
+    constructor(public readonly inclusivePositionFromSkip: bigint, public readonly inclusivePositionToSkip: bigint) {
         super();
-        const header = Buffer.alloc(16);
-        header.writeBigUint64BE(inclusivePositionFromSkip, 0);
-        header.writeBigUint64BE(inclusivePositionToSkip, 8);
-        this.store = new BufferStore(id);
-        this.store.append(header);
-        this.blockPosition = this.store.length;
+        this._header = Buffer.alloc(16);
+        this._header.writeBigUint64BE(this.inclusivePositionFromSkip, 0);
+        this._header.writeBigUint64BE(this.inclusivePositionToSkip, 8);
+        this.store = null;
+        this.blockPosition = this._header.length;
         this.bodyLength = 0;
-        this.headerLength = header.length;
+        this.headerLength = this._header.length;
         this.type = SystemBlockTypes.Consolidated;
     }
 
-    public get inclusivePositionFromSkip(): bigint {
-        return this.header().readBigUInt64BE(0);
+    public override header(): Buffer {
+        return this._header;
     }
 
-    public get inclusivePositionToSkip(): bigint {
-        return this.header().readBigUInt64BE(8);
+    public override body(): Buffer {
+        return Buffer.alloc(0);
     }
 
     public override merge(other: Block): Block {
         throw new Error(`System Block(${this.type}):${this.store?.id} cannot be merged with another Block(${other.type}):${other.store?.id}`);
+    }
+
+    public static override from(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): SkipBlock {
+        const block = super.from(store, type, blockPosition, headerLength, bodyLength);
+        const inclusivePositionFromSkip = block.header().readBigUint64BE(0);
+        const inclusivePositionToSkip = block.header().readBigUint64BE(8);
+        const returnObject = new SkipBlock(inclusivePositionFromSkip, inclusivePositionToSkip);
+        returnObject.blockPosition = blockPosition;
+        returnObject.store = store;
+        if (returnObject.bodyLength !== bodyLength) throw new Error(`Invalid body length ${bodyLength}, must be 0.`);
+        return returnObject;
     }
 
 }
@@ -147,6 +134,7 @@ export class Blocks {
                     && Blocks.SOB.reduce((a, e, idx, arr) => a && e === accumulator[matchingIndex - ((arr.length - 1) - idx)], true)) {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
                     let block = this.cachedBlocks.get(absoluteMatchingIndex);
+                    let isBlockFromCache = true;
                     if (block == null) {
                         //construct & invoke 
                         const preamble = this.store.measuredReverseRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
@@ -161,12 +149,14 @@ export class Blocks {
                         if (crc1 != crc2 && crc2 != crc16(preamble.subarray(0, 12))) {
                             continue;
                         }
-                        //Construct
-                        const constructFunction = blockTypeFactory?.get(blockType) || Blocks.SystemBlockFactory.get(blockType) || Block.from;
-                        block = constructFunction(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
-                        if (this.cachePolicy != CachePolicy.None) {
-                            this.cachedBlocks.set(absoluteMatchingIndex, block);
-                        }
+                        block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
+                        isBlockFromCache = false;
+                    }
+                    //Construct //Reason it need to be out is cause of casting blocks with newer types even when they are in cache.
+                    const constructFunction = blockTypeFactory?.get(block.type) || Blocks.SystemBlockFactory.get(block.type) || Block.from;
+                    block = constructFunction(block.store as IAppendStore, block.type, block.blockPosition, block.headerLength, block.bodyLength);
+                    if (this.cachePolicy != CachePolicy.None || isBlockFromCache === true) {
+                        this.cachedBlocks.set(absoluteMatchingIndex, block);
                     }
                     matchingIndex = -1;
                     reverserBuffer = Buffer.alloc(0);
@@ -187,33 +177,39 @@ export class Blocks {
         }
     }
 
-    public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false) {
-        const cursor = this.iterate();
-        let result = cursor.next();
+    public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: Map<number, typeof Block.from> | undefined = undefined): boolean {
         let accumulator: Block | null = null;
-        let lastPurgePosition: number = this.storeReaderPosition;
+        let lastToPurgePosition: number = this.storeReaderPosition, lastFromPurgePosition: number = this.storeReaderPosition;
         let currentBlock: Block | null = null;
+        let onlySingleBlock = true;
+        const cursor = this.iterate(blockTypeFactory);
+        let result = cursor.next();
         while (!result.done) {
             currentBlock = result.value[0];
             if (accumulator == null) {
                 accumulator = currentBlock;
-                lastPurgePosition = currentBlock.blockPosition + this.preambleLength;
+                lastFromPurgePosition = currentBlock.blockPosition + this.preambleLength;
             }
             else {
+                onlySingleBlock = false;
                 accumulator = currentBlock.merge(accumulator);
-            }
-            if (shouldPurge(accumulator) === true) {
-                this.purgeConsolidatedBlocks(currentBlock, accumulator, lastPurgePosition);
+                lastToPurgePosition = currentBlock.blockPosition - (currentBlock.headerLength + currentBlock.bodyLength);
+                if (shouldPurge(accumulator) === true) {
+                    this.purgeConsolidatedBlocks(accumulator, lastFromPurgePosition, lastToPurgePosition);
+                }
             }
             result = cursor.next();
         }
-        if (accumulator != null && currentBlock != null) {
-            this.purgeConsolidatedBlocks(currentBlock, accumulator, lastPurgePosition);
+        if (accumulator != null && onlySingleBlock === false) {
+            this.purgeConsolidatedBlocks(accumulator, lastFromPurgePosition, lastToPurgePosition);
         }
+
+        return !onlySingleBlock;
     }
 
     public index() {
         //This indexing the blocks in the file and appends a index block to the store, difference is it does not move or duplicate data like consolidate function.
+        throw new Error("TBI");
     }
 
     constructor(store: IAppendStore, cachePolicy: CachePolicy = CachePolicy.Default) {
@@ -237,8 +233,8 @@ export class Blocks {
 
     private positionSkipper(position: number): number {
         return this.skipPositions.reduce((acc, s) => {
-            if (s.fromPositionInclusive <= acc && acc >= s.toPositionInclusive) {
-                acc = s.toPositionInclusive + 1;
+            if (acc >= s.toPositionInclusive && acc <= s.fromPositionInclusive) {
+                acc = s.toPositionInclusive - 1;
             }
             return acc;
         }, position);
@@ -264,14 +260,13 @@ export class Blocks {
         return finalBuffer.length;
     }
 
-    private purgeConsolidatedBlocks(currentBlock: Block, accumulator: Block | null, lastPurgePosition: number) {
-        const inclusivePositionToSkip = BigInt((currentBlock.blockPosition - (currentBlock.bodyLength + currentBlock.headerLength)) - 1);
-        const inclusivePositionFromSkip = BigInt(lastPurgePosition);
+    private purgeConsolidatedBlocks(accumulator: Block | null, lastFromPurgePosition: number, lastToPurgePosition: number) {
+        const inclusivePositionToSkip = BigInt(lastToPurgePosition + 1);
+        const inclusivePositionFromSkip = BigInt(lastFromPurgePosition);
         const skip = new SkipBlock(inclusivePositionFromSkip, inclusivePositionToSkip);
         this.append(accumulator as Block);
         this.systemBlockAppend(skip);
         accumulator = null;
-        lastPurgePosition = currentBlock.blockPosition - (currentBlock.bodyLength + currentBlock.headerLength);
         this.cachedBlocks.clear();
     }
 }

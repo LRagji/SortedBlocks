@@ -183,7 +183,7 @@ describe(`Blocks iterate specs`, () => {
         const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
-        const cursor = target.iterate(new Map([[100, TestBlock.testBlockFrom]]));
+        const cursor = target.iterate(new Map([[100, TestBlock.from]]));
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
         let result = cursor.next();

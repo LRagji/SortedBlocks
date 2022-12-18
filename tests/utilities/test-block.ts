@@ -23,8 +23,10 @@ export class TestBlock extends Block {
         return new TestBlock(body, header, this.store);
     }
 
-    public static testBlockFrom(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): TestBlock {
-        const b = Block.from(store, type, blockPosition, headerLength, bodyLength);
-        return new TestBlock(b.body(), b.header(), store);
+    public static override from(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): TestBlock {
+        const b = super.from(store, type, blockPosition, headerLength, bodyLength);
+        const returnBlock = new TestBlock(b.body(), b.header(), store);
+        returnBlock.blockPosition = blockPosition;
+        return returnBlock;
     }
 }
