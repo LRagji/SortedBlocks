@@ -1,128 +1,13 @@
 import { IAppendStore } from "./i-append-store";
 import crc16 from 'crc/calculators/crc16';
-
-export enum CachePolicy {
-    Default, //Should only cache indexes
-    None, //Clear cache after every call
-}
-
-enum SystemBlockTypes {
-    Consolidated = 10,
-}
-export class Block {
-    public type: number = 0;
-    public blockPosition: number = -1;
-    public headerLength: number = -1;
-    public bodyLength: number = -1;
-    public store: IAppendStore | null = null;
-
-    public static from(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): Block {
-        if (store == null) throw new Error(`Parameter "store" cannot be null or undefined.`);
-        if (type == null || type < 0 || type > MaxUint32) throw new Error(`Parameter "type" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
-        if (blockPosition == null || blockPosition < 0) throw new Error(`Parameter "blockPosition" cannot be null or undefined and has to be greater than 0.`);
-        if (headerLength == null || headerLength < 0 || headerLength > MaxUint32) throw new Error(`Parameter "headerLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
-        if (bodyLength == null || bodyLength < 0 || bodyLength > MaxUint32) throw new Error(`Parameter "bodyLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
-        const returnObject = new Block();
-        returnObject.store = store;
-        returnObject.type = type;
-        returnObject.blockPosition = blockPosition;
-        returnObject.headerLength = headerLength;
-        returnObject.bodyLength = bodyLength;
-        return returnObject;
-    }
-
-    public header(): Buffer {
-        return this.store?.measuredReverseRead(this.blockPosition, this.blockPosition - this.headerLength) || Buffer.alloc(0);
-    }
-    public body(): Buffer {
-        return this.store?.measuredReverseRead((this.blockPosition - this.headerLength), this.blockPosition - (this.headerLength + this.bodyLength)) || Buffer.alloc(0);
-    }
-    public merge(other: Block): Block {
-        throw new Error("Method not implemented.");
-    }
-
-}
-export class SkipBlock extends Block {
-
-    private readonly _header: Buffer;
-
-    constructor(public readonly inclusivePositionFromSkip: bigint, public readonly inclusivePositionToSkip: bigint) {
-        super();
-        this._header = Buffer.alloc(16);
-        this._header.writeBigUint64BE(this.inclusivePositionFromSkip, 0);
-        this._header.writeBigUint64BE(this.inclusivePositionToSkip, 8);
-        this.store = null;
-        this.blockPosition = this._header.length;
-        this.bodyLength = 0;
-        this.headerLength = this._header.length;
-        this.type = SystemBlockTypes.Consolidated;
-    }
-
-    public override header(): Buffer {
-        return this._header;
-    }
-
-    public override body(): Buffer {
-        return Buffer.alloc(0);
-    }
-
-    public override merge(other: Block): Block {
-        throw new Error(`System Block(${this.type}):${this.store?.id} cannot be merged with another Block(${other.type}):${other.store?.id}`);
-    }
-
-    public static override from(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): SkipBlock {
-        const block = super.from(store, type, blockPosition, headerLength, bodyLength);
-        const inclusivePositionFromSkip = block.header().readBigUint64BE(0);
-        const inclusivePositionToSkip = block.header().readBigUint64BE(8);
-        const returnObject = new SkipBlock(inclusivePositionFromSkip, inclusivePositionToSkip);
-        returnObject.blockPosition = blockPosition;
-        returnObject.store = store;
-        if (returnObject.bodyLength !== bodyLength) throw new Error(`Invalid body length ${bodyLength}, must be 0.`);
-        return returnObject;
-    }
-
-}
-
-export interface IBlocksCache {
-    set(absolutePosition: number, block: Block): void;
-    get(absolutePosition: number): Block | undefined;
-    clear(before: number | undefined, after: number | undefined): void;
-    length: number;
-}
-
-export class LocalCache implements IBlocksCache {
-    public readonly cache = new Map<number, Block>();
-
-    public get length() {
-        return this.cache.size;
-    }
-
-    public set(absolutePosition: number, block: Block): void {
-        this.cache.set(absolutePosition, block);
-    }
-    public get(absolutePosition: number): Block | undefined {
-        return this.cache.get(absolutePosition);
-    }
-    public clear(before: number | undefined = undefined, after: number | undefined = undefined): void {
-        this.cache.clear();
-    }
-
-}
-
-// export interface KVP extends IBlock {
-//     version: number,
-//     minKey: number,
-//     maxKey: number,
-//     integrityVerified: boolean,
-//     index: Map<bigint, [startIndex: number, endIndex: number]>,
-//     get(key: bigint): Buffer
-//     iterate(ascending: boolean): IterableIterator<[key: bigint, value: Buffer]>,
-//     fromMap(kvps: Map<bigint, Buffer>): KVP
-// }
+import { SystemBlockTypes } from "./system-block-types";
+import { IBlocksCache } from "./i-blocks-cache";
+import { LocalCache } from "./local-cache";
+import { SkipBlock } from "./skip-block";
+import { Block } from "./block";
+import { CachePolicy } from "./cache-policy";
 
 export const MaxUint32 = 4294967295;
-
-
 export class Blocks {
 
     public readonly cacheContainer: IBlocksCache;
@@ -297,3 +182,4 @@ export class Blocks {
         this.cacheContainer.clear(undefined, undefined);
     }
 }
+

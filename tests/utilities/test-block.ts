@@ -1,4 +1,4 @@
-import { Block } from "../../source/blocks";
+import { Block } from "../../source/index";
 import { IAppendStore } from "../../source/i-append-store";
 
 export class TestBlock extends Block {

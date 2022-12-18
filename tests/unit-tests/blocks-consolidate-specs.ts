@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { Block, Blocks, CachePolicy } from '../../source/blocks';
+import { Block, Blocks } from '../../source/index';
 import { MockedAppendStore } from '../utilities/mock-store';
 import { TestBlock } from '../utilities/test-block';
 import sinon, { SinonSpiedInstance } from 'sinon';

@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { Blocks, MaxUint32 } from '../../source/blocks';
+import { Blocks, MaxUint32 } from '../../source/index';
 import { MockedAppendStore } from '../utilities/mock-store';
 import { TestBlock } from '../utilities/test-block';
 import sinon, { SinonSpiedInstance } from 'sinon';
