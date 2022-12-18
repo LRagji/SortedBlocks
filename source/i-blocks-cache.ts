@@ -1,6 +1,5 @@
 import { Block } from "./block";
 
-
 export interface IBlocksCache {
     set(absolutePosition: number, block: Block): void;
     get(absolutePosition: number): Block | undefined;
