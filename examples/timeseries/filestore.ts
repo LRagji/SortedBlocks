@@ -1,9 +1,9 @@
-import { IAppendStore } from '../../source/i-append-store.js';
+import { IAppendStore } from '../../source/index';
 import fs from 'node:fs';
 import path from "node:path";
 
 export class FileStore implements IAppendStore {
-    Id: string;
+    id: string;
     private readonly handle: number;
     //private readonly writeCache = Buffer.alloc(1024);
     private readonly readCache = Buffer.alloc(1024);
@@ -12,12 +12,30 @@ export class FileStore implements IAppendStore {
     private readonly readOPS = new Map<number, number>();
 
     constructor(filePath: string, blockSize: number = 1024) {
-        this.Id = filePath;
+        this.id = filePath;
         const directory = path.dirname(filePath);
         fs.mkdirSync(directory, { recursive: true })
         this.handle = fs.openSync(filePath, "as+");
         //this.writeCache = Buffer.alloc(blockSize);
         this.readCache = Buffer.alloc(blockSize);
+    }
+
+    public measuredReverseRead(fromInclusivePosition: number, toExclusivePosition: number): Buffer | null {
+        let accumulator = Buffer.alloc(0);
+        const lengthRequired = (fromInclusivePosition - toExclusivePosition);
+        let startPosition = fromInclusivePosition;
+        do {
+            let data: Buffer | null = this.reverseRead(startPosition);
+            if (data != null && data.length !== 0) {
+                accumulator = Buffer.concat([data, accumulator]);
+                startPosition -= data.length;
+            }
+            else if (data == null || data.length === 0) {
+                break;
+            }
+        }
+        while (lengthRequired > accumulator.length)
+        return accumulator.subarray(accumulator.length - lengthRequired);
     }
 
     public append(data: Buffer): void {
@@ -39,8 +57,8 @@ export class FileStore implements IAppendStore {
         }
     }
 
-    public size(): number {
-        const size = fs.statSync(this.Id).size;
+    public get length(): number {
+        const size = fs.statSync(this.id).size;
         return size;
     }
 

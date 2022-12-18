@@ -22,6 +22,9 @@ export class Blocks {
     public static readonly SOB = Buffer.from("2321", "hex");//#! 35 33
     private static readonly SystemBlockFactory = new Map<number, typeof Block.from>([[SystemBlockTypes.Consolidated, SkipBlock.from]])
 
+    /***
+     * Creates a new instance of Blocks.
+     */
     constructor(store: IAppendStore, cachePolicy: CachePolicy = CachePolicy.Default, cacheContainer: IBlocksCache = new LocalCache()) {
         this.store = store;
         this.cachePolicy = cachePolicy;
