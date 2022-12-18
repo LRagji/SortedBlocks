@@ -17,8 +17,14 @@ export class TestBlock extends Block {
         return this.bodyBuff;
     }
 
-    public static textBlockFrom(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): TestBlock {
-        const b = Block.form(store, type, blockPosition, headerLength, bodyLength);
+    public override merge(other: Block): Block {
+        const header = Buffer.concat([other.header(), this.header()]);
+        const body = Buffer.concat([other.body(), this.body()]);
+        return new TestBlock(body, header, this.store);
+    }
+
+    public static testBlockFrom(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): TestBlock {
+        const b = Block.from(store, type, blockPosition, headerLength, bodyLength);
         return new TestBlock(b.body(), b.header(), store);
     }
 }
