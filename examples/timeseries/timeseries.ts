@@ -78,7 +78,7 @@ function read() {
     while (!result.done) {
         const block = result.value[0] as TSBlock;
         const tags = Array.from(block.tags());
-        const samples = block.samples(BigInt(12), () => true);
+        //const samples = block.samples(BigInt(12), () => true);
         console.log(`#${block.blockPosition}: Tags:${tags.length}`);
         blockCounter++;
         result = cursor.next();
