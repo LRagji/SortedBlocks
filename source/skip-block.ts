@@ -3,7 +3,7 @@ import { SystemBlockTypes } from "./system-block-types";
 import { Block } from "./block";
 
 export class SkipBlock extends Block {
-
+    //TODO: Skip blocks can have multiple entries.
     private readonly _header: Buffer;
 
     constructor(public readonly inclusivePositionFromSkip: bigint, public readonly inclusivePositionToSkip: bigint) {

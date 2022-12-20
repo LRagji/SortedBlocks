@@ -11,11 +11,12 @@ export const MaxUint32 = 4294967295;
 export class Blocks {
 
     public readonly cacheContainer: IBlocksCache;
+    public readonly store: IAppendStore;
+
     private readonly skipPositions = new Array<{ fromPositionInclusive: number, toPositionInclusive: number }>();//Should always be sorted in desc order of position
 
     private storeReaderPosition: number = -1;
     private storeStartPosition: number = 0;
-    private readonly store: IAppendStore;
     private readonly cachePolicy: CachePolicy;
     private readonly systemBlocks = 100;
     private readonly preambleLength = 18;
@@ -98,6 +99,8 @@ export class Blocks {
     }
 
     public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: Map<number, typeof Block.from> | undefined = undefined): boolean {
+        //TODO: We need to implement skipping mechanishm, as we may find blocks of different types which cannot be merged.
+        //TODO: We need to include position of next block in purge callback so that the user urderstands where they are in the process.
         let accumulator: Block | null = null;
         let lastToPurgePosition: number = this.storeReaderPosition, lastFromPurgePosition: number = this.storeReaderPosition;
         let currentBlock: Block | null = null;
@@ -133,6 +136,7 @@ export class Blocks {
     }
 
     private handleSystemBlock(systemBlock: Block): void {
+        //TODO: Skip blocks can have multiple entries.
         switch (systemBlock.type) {
             case SystemBlockTypes.Consolidated:
                 const castedBlock: SkipBlock = systemBlock as SkipBlock;

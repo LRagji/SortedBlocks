@@ -20,6 +20,21 @@ export class FileStore implements IAppendStore {
         this.readCache = Buffer.alloc(blockSize);
     }
 
+    reverseRead(fromInclusivePosition: number): Buffer | null {
+        const operationTimestamp = Date.now();
+        const operationBucket = operationTimestamp - (operationTimestamp % 1000);
+        let ops = this.readOPS.get(operationBucket) || 0;
+        ops++;
+        this.readOPS.set(operationBucket, ops);
+        this.readOPS.delete(operationBucket - 15000);
+        if (fs.readSync(this.handle, this.readCache, 0, this.readCache.length, (fromInclusivePosition - this.readCache.length) + 1) > 0) {
+            return this.readCache;
+        }
+        else {
+            return null;
+        }
+    }
+
     public measuredReverseRead(fromInclusivePosition: number, toExclusivePosition: number): Buffer | null {
         let accumulator = Buffer.alloc(0);
         const lengthRequired = (fromInclusivePosition - toExclusivePosition);
@@ -40,21 +55,6 @@ export class FileStore implements IAppendStore {
 
     public append(data: Buffer): void {
         fs.writeSync(this.handle, data, 0, data.length);
-    }
-
-    public reverseRead(fromPosition: number): Buffer | null {
-        const operationTimestamp = Date.now();
-        const operationBucket = operationTimestamp - (operationTimestamp % 1000);
-        let ops = this.readOPS.get(operationBucket) || 0;
-        ops++;
-        this.readOPS.set(operationBucket, ops);
-        this.readOPS.delete(operationBucket - 15000);
-        if (fs.readSync(this.handle, this.readCache, 0, this.readCache.length, fromPosition - this.readCache.length) > 0) {
-            return this.readCache;
-        }
-        else {
-            return null;
-        }
     }
 
     public get length(): number {
