@@ -1,6 +1,6 @@
 {
   "name": "sorted-blocks",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "This is a simple library for append only data structure persistent on disk.",
   "main": "index.js",
   "scripts": {
