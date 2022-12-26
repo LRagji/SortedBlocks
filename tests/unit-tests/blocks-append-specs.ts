@@ -22,7 +22,7 @@ describe(`Blocks append specs`, () => {
         const target = new Blocks(mockStore);
         const body = Buffer.from("Body"), header = Buffer.from("Header");
         const payload = new TestBlock(body, header, mockStore);
-        const bytesAppended = target.append(payload);
+        const bytesAppended = await target.append(payload);
 
         const preamble = Buffer.alloc(18);
         preamble.writeUInt32BE(header.length);
@@ -43,7 +43,7 @@ describe(`Blocks append specs`, () => {
         const target = new Blocks(mockStore);
         const body = Buffer.alloc(0), header = Buffer.alloc(0);
         const payload = new TestBlock(body, header, mockStore);
-        const bytesAppended = target.append(payload);
+        const bytesAppended = await target.append(payload);
 
         const preamble = Buffer.alloc(18);
         preamble.writeUInt32BE(header.length);
@@ -65,7 +65,7 @@ describe(`Blocks append specs`, () => {
         let body = Buffer.alloc(0), header = Buffer.alloc(0);
         sinon.stub(body, "length").value(MaxUint32 + 1);
         const payload = new TestBlock(body, header, mockStore);
-        assert.throws(() => target.append(payload), new Error(`Block body size cannot be more than ${MaxUint32}.`));
+        await assert.rejects(async () => await target.append(payload), new Error(`Block body size cannot be more than ${MaxUint32}.`));
     })
 
     it('should not allow header greater than 4294967295', async () => {
@@ -73,7 +73,7 @@ describe(`Blocks append specs`, () => {
         let body = Buffer.alloc(0), header = Buffer.alloc(0);
         sinon.stub(header, "length").value(MaxUint32 + 1);
         const payload = new TestBlock(body, header, mockStore);
-        assert.throws(() => target.append(payload), new Error(`Block header size cannot be more than ${MaxUint32}.`));
+        await assert.rejects(async () => await target.append(payload), new Error(`Block header size cannot be more than ${MaxUint32}.`));
     })
 
     it('should not allow appends for system blocks 0 to 99', async () => {
@@ -81,9 +81,9 @@ describe(`Blocks append specs`, () => {
         let body = Buffer.alloc(0), header = Buffer.alloc(0);
         const payload = new TestBlock(body, header, mockStore);
         sinon.stub(payload, "type").value(0);
-        assert.throws(() => target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
+        await assert.rejects(async () => await target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
         sinon.stub(payload, "type").value(99);
-        assert.throws(() => target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
+        await assert.rejects(async () => await target.append(payload), new Error(`Block type must be between 100 and ${MaxUint32}.`));
     })
 });
 

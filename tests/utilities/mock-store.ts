@@ -54,7 +54,7 @@ export class MockedAppendStore implements IAppendStore {
         return data;
     }
 
-    append(data: Buffer): void {
+    async append(data: Buffer): Promise<void> {
         this.store = Buffer.concat([this.store, data]);
     }
 

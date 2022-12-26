@@ -24,7 +24,11 @@ describe(`Blocks iterate specs`, () => {
         const bytesPerBlock = 28;
         const preambleByteLength = 18;
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         const cursor = target.iterate();
@@ -58,7 +62,11 @@ describe(`Blocks iterate specs`, () => {
         const target = new Blocks(mockStore);
         const payloads = Array.from({ length: 200 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         const cursor = target.iterate();
@@ -104,7 +112,11 @@ describe(`Blocks iterate specs`, () => {
         const body = Buffer.from("Body"), header = Buffer.from("Header");
         const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         mockStore.store = Buffer.concat([Buffer.from("I am #!pre Garbage#!"), mockStore.store, Buffer.from("I am #!post Garbage#!")]);
@@ -139,7 +151,11 @@ describe(`Blocks iterate specs`, () => {
         const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
         const preambleByteLength = 18;
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         let actualBlocks = new Map<number, Block>();
@@ -161,7 +177,11 @@ describe(`Blocks iterate specs`, () => {
         const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
         const preambleByteLength = 18;
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         let actualBlocks = new Map<number, Block>();
@@ -180,7 +200,11 @@ describe(`Blocks iterate specs`, () => {
         const target = new Blocks(mockStore);
         const payloads = Array.from({ length: 200 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         const cursor = target.iterate(new Map([[100, TestBlock.from]]));
@@ -213,7 +237,7 @@ describe(`Blocks iterate specs`, () => {
         const target = new Blocks(mockStore);
         const payloads = Array.from({ length: 3 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));;
 
-        let bytesAppended = target.append(payloads[0]);
+        let bytesAppended = await target.append(payloads[0]);
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         let cursor = target.iterate();
@@ -239,7 +263,10 @@ describe(`Blocks iterate specs`, () => {
         }
         //assert.equal(payloads.length, 2);
         const b = payloads.shift();
-        bytesAppended += payloads.reduce((acc, p) => acc + target.append(p), 0);
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
         payloads.unshift(b as TestBlock);
 

@@ -21,7 +21,7 @@ describe(`Blocks consolidate specs`, () => {
         const target = new Blocks(mockStore);
         const blockTypeFactory = new Map([[100, TestBlock.from]]);
         const payload = new TestBlock(Buffer.from("B1"), Buffer.from("H1"), mockStore);
-        const bytesAppended = target.append(payload);
+        const bytesAppended = await target.append(payload);
         assert.strictEqual(mockStore.store.length, bytesAppended);
         assert.strictEqual(target.consolidate(undefined, blockTypeFactory), false);
     });
@@ -31,7 +31,11 @@ describe(`Blocks consolidate specs`, () => {
         const blockTypeFactory = new Map([[100, TestBlock.from]]);
         const payloads = [new TestBlock(Buffer.from("B1"), Buffer.from("H1"), mockStore), new TestBlock(Buffer.from("B2"), Buffer.from("H2"), mockStore), new TestBlock(Buffer.from("B3"), Buffer.from("H3"), mockStore)];
 
-        const bytesAppended = payloads.reduce((acc, p) => acc + target.append(p), 0);
+        let bytesAppended = 0;
+        for (let index = 0; index < payloads.length; index++) {
+            const p = payloads[index];
+            bytesAppended += await target.append(p);
+        }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         let cursor = target.iterate();

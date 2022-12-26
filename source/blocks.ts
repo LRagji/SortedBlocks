@@ -32,7 +32,7 @@ export class Blocks {
         this.cacheContainer = cacheContainer;
     }
 
-    public append(block: Block): number {
+    public append(block: Block): Promise<number> {
         if (block.type > MaxUint32 || block.type < this.systemBlocks) throw new Error(`Block type must be between ${this.systemBlocks} and ${MaxUint32}.`);
         return this.systemBlockAppend(block);
     }
@@ -159,7 +159,7 @@ export class Blocks {
         }, position);
     }
 
-    private systemBlockAppend(block: Block): number {
+    private async systemBlockAppend(block: Block): Promise<number> {
         const blockBody = block.body();
         const blockHeader = block.header();
         if (blockBody.length > MaxUint32) throw new Error(`Block body size cannot be more than ${MaxUint32}.`);
@@ -175,7 +175,7 @@ export class Blocks {
         preamble.writeUint8(Blocks.SOB[1], 17);
         const finalBuffer = Buffer.concat([blockBody, blockHeader, preamble]);
 
-        this.store.append(finalBuffer);
+        await this.store.append(finalBuffer);
         return finalBuffer.length;
     }
 
