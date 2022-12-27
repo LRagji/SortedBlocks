@@ -18,6 +18,9 @@ This is the format used to append blocks in the store, where each block is forma
       <table>
       <tr><td align="center" colspan="2"><b>Block-Body</b></td></tr>
       <tr><td>Byte[]</td><td><4294967295Bytes</td></tr>
+      <tr>
+        <td align="center" colspan="2" ><small>Index 0 in on LHS</small></td>
+      </tr>
       </table>
     </td>
   </tr>
@@ -26,6 +29,9 @@ This is the format used to append blocks in the store, where each block is forma
       <table>
       <tr><td align="center" colspan="2"><b>Block-Header</b></td></tr>
       <tr><td>Byte[]</td><td><4294967295Bytes</td></tr>
+      <tr>
+        <td align="center" colspan="2" ><small>Index 0 in on LHS</small></td>
+      </tr>
       </table>
     </td>
   </tr>
@@ -66,5 +72,8 @@ This is the format used to append blocks in the store, where each block is forma
       <tr><td>0x23,0x21(#!)</td><td>2Bytes</td></tr>
       </table>
     </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="6" ><small>Index 0 in on RHS</small></td>
   </tr>
 </table>
