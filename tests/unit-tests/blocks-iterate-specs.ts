@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { Block, Blocks, CachePolicy, LocalCache } from '../../source/index';
+import { Block, Blocks, CachePolicy, IAppendStore, LocalCache } from '../../source/index';
 import { MockedAppendStore } from '../utilities/mock-store';
 import { TestBlock } from '../utilities/test-block';
 import sinon, { SinonSpiedInstance } from 'sinon';
@@ -199,6 +199,7 @@ describe(`Blocks iterate specs`, () => {
     it('should be able to factory map for initializing the user defined block types.', async () => {
         const target = new Blocks(mockStore);
         const payloads = Array.from({ length: 200 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));
+        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.headerLength, b.bodyLength) : b;
 
         let bytesAppended = 0;
         for (let index = 0; index < payloads.length; index++) {
@@ -207,7 +208,7 @@ describe(`Blocks iterate specs`, () => {
         }
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
-        const cursor = target.iterate(new Map([[100, TestBlock.from]]));
+        const cursor = target.iterate(blockTypeFactory);
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
         let result = cursor.next();

@@ -21,7 +21,6 @@ export class Blocks {
     private readonly systemBlocks = 100;
     private readonly preambleLength = 18;
     public static readonly SOB = Buffer.from("2321", "hex");//#! 35 33
-    private static readonly SystemBlockFactory = new Map<number, typeof Block.from>([[SystemBlockTypes.Consolidated, SkipBlock.from]])
 
     /***
      * Creates a new instance of Blocks.
@@ -37,7 +36,7 @@ export class Blocks {
         return this.systemBlockAppend(block);
     }
 
-    public * iterate(blockTypeFactory: Map<number, typeof Block.from> | undefined = undefined): Generator<[Block, number]> {
+    public * iterate(blockTypeFactory: (block: Block) => Block = (b) => b): Generator<[Block, number]> {
         this.storeReaderPosition = this.positionSkipper(this.store.length - 1);
         let accumulator = Buffer.alloc(0);
         const SOBLastByte = Blocks.SOB[Blocks.SOB.length - 1];
@@ -55,7 +54,6 @@ export class Blocks {
                     && Blocks.SOB.reduce((a, e, idx, arr) => a && e === accumulator[matchingIndex - ((arr.length - 1) - idx)], true)) {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
                     let block = this.cacheContainer.get(absoluteMatchingIndex);
-                    let isBlockFromCache = true;
                     if (block == null) {
                         //construct & invoke 
                         const preamble = this.store.measuredReverseRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
@@ -70,15 +68,14 @@ export class Blocks {
                         if (crc1 != crc2 && crc2 != crc16(preamble.subarray(0, 12))) {
                             continue;
                         }
+
+                        //Construct
                         block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
-                        isBlockFromCache = false;
+                        if (this.cachePolicy != CachePolicy.None) {
+                            this.cacheContainer.set(absoluteMatchingIndex, block);
+                        }
                     }
-                    //Construct //Reason it need to be out is cause of casting blocks with newer types even when they are in cache.
-                    const constructFunction = blockTypeFactory?.get(block.type) || Blocks.SystemBlockFactory.get(block.type) || Block.from;
-                    block = constructFunction(block.store as IAppendStore, block.type, block.blockPosition, block.headerLength, block.bodyLength);
-                    if (this.cachePolicy != CachePolicy.None || isBlockFromCache === true) {
-                        this.cacheContainer.set(absoluteMatchingIndex, block);
-                    }
+
                     matchingIndex = -1;
                     reverserBuffer = Buffer.alloc(0);
                     accumulator = Buffer.alloc(0);
@@ -88,7 +85,7 @@ export class Blocks {
                         this.handleSystemBlock(block);
                     }
                     else {
-                        yield ([block, Math.max(this.storeReaderPosition - this.storeStartPosition, this.storeStartPosition)]);
+                        yield ([blockTypeFactory(block), Math.max(this.storeReaderPosition - this.storeStartPosition, this.storeStartPosition)]);
                     }
                 }
             }
@@ -98,7 +95,7 @@ export class Blocks {
         }
     }
 
-    public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: Map<number, typeof Block.from> | undefined = undefined): boolean {
+    public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: (block: Block) => Block = (b) => b): boolean {
         //TODO: We need to implement skipping mechanishm, as we may find blocks of different types which cannot be merged.
         //TODO: We need to include position of next block in purge callback so that the user urderstands where they are in the process.
         let accumulator: Block | null = null;
@@ -139,7 +136,7 @@ export class Blocks {
         //TODO: Skip blocks can have multiple entries.
         switch (systemBlock.type) {
             case SystemBlockTypes.Consolidated:
-                const castedBlock: SkipBlock = systemBlock as SkipBlock;
+                const castedBlock: SkipBlock = SkipBlock.from(systemBlock.store as IAppendStore, systemBlock.type, systemBlock.blockPosition, systemBlock.headerLength, systemBlock.bodyLength);
                 this.skipPositions.push({ fromPositionInclusive: Number(castedBlock.inclusivePositionFromSkip), toPositionInclusive: Number(castedBlock.inclusivePositionToSkip) });
                 //Sort the skip positions
                 this.skipPositions.sort((a, b) => b.toPositionInclusive - b.toPositionInclusive);

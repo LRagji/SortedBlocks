@@ -2,6 +2,8 @@ import { Block } from "../../source/index";
 import { IAppendStore } from "../../source/i-append-store";
 
 export class TestBlock extends Block {
+    public static type: number = 100;
+
     constructor(private readonly bodyBuff: Buffer, private readonly headerBuff: Buffer, public store: IAppendStore) {
         super();
         this.type = 100;
