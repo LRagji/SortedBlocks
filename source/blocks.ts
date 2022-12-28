@@ -53,6 +53,7 @@ export class Blocks {
                     && (matchingIndex - (Blocks.SOB.length - 1)) >= 0
                     && Blocks.SOB.reduce((a, e, idx, arr) => a && e === accumulator[matchingIndex - ((arr.length - 1) - idx)], true)) {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
+                    let isBlockFromCache = true;
                     let block = this.cacheContainer.get(absoluteMatchingIndex);
                     if (block == null) {
                         //construct & invoke 
@@ -71,9 +72,11 @@ export class Blocks {
 
                         //Construct
                         block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
+                        if (block.type >= this.systemBlocks) block = blockTypeFactory(block);
                         if (this.cachePolicy != CachePolicy.None) {
                             this.cacheContainer.set(absoluteMatchingIndex, block);
                         }
+                        isBlockFromCache = false;
                     }
 
                     matchingIndex = -1;
@@ -85,7 +88,8 @@ export class Blocks {
                         this.handleSystemBlock(block);
                     }
                     else {
-                        yield ([blockTypeFactory(block), Math.max(this.storeReaderPosition - this.storeStartPosition, this.storeStartPosition)]);
+                        if (isBlockFromCache === true) block = blockTypeFactory(block);//This is the case when block was cached it was casted into some different type now its of different type.
+                        yield ([block, Math.max(this.storeReaderPosition - this.storeStartPosition, this.storeStartPosition)]);
                     }
                 }
             }
