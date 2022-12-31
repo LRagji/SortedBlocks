@@ -36,8 +36,8 @@ export class Blocks {
         return this.systemBlockAppend(block);
     }
 
-    public * iterate(blockTypeFactory: (block: Block) => Block = (b) => b): Generator<[Block, number]> {
-        this.storeReaderPosition = this.positionSkipper(this.store.length - 1);
+    public * iterate(blockTypeFactory: (block: Block) => Block = (b) => b, readFrom: number = this.store.length - 1): Generator<[Block, number]> {
+        this.storeReaderPosition = this.positionSkipper(readFrom);
         let accumulator = Buffer.alloc(0);
         const SOBLastByte = Blocks.SOB[Blocks.SOB.length - 1];
         while (this.storeReaderPosition > this.storeStartPosition) {
