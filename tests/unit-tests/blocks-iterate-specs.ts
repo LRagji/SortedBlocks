@@ -167,7 +167,7 @@ describe(`Blocks iterate specs`, () => {
             result = cursor.next();
         }
         assert.equal(actualBlocks.size, target.cacheContainer.length);
-        assert.deepStrictEqual(Array.from(actualBlocks.keys()), Array.from((target.cacheContainer as LocalCache).cache.keys()));
+        assert.deepStrictEqual(Array.from(actualBlocks.keys(), (v, _) => `${mockStore.id}-${v}`), Array.from((target.cacheContainer as LocalCache).cache.keys()));
         assert.deepStrictEqual(Array.from(actualBlocks.values()), Array.from((target.cacheContainer as LocalCache).cache.values()));
     });
 
