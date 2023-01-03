@@ -26,7 +26,7 @@ export class SkipBlock extends Block {
         return Buffer.alloc(0);
     }
 
-    public override merge(other: Block): Block {
+    public override merge(other: Block): Block[] {
         throw new Error(`System Block(${this.type}):${this.store?.id} cannot be merged with another Block(${other.type}):${other.store?.id}`);
     }
 

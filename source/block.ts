@@ -35,7 +35,7 @@ export class Block {
     public body(): Buffer {
         return this.store?.measuredReverseRead((this.blockPosition - this.headerLength), this.blockPosition - (this.headerLength + this.bodyLength)) || Buffer.alloc(0);
     }
-    public merge(other: Block): Block {
+    public merge(other: Block): Block[] {
         throw new Error("Method not implemented.");
     }
 

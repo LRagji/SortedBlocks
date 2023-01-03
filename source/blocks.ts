@@ -21,6 +21,8 @@ export class Blocks {
     private readonly systemBlocks = 100;
     private readonly preambleLength = 18;
     public static readonly SOB = Buffer.from("2321", "hex");//#! 35 33
+    public static readonly MaximumSupportedHeaderBytes = MaxUint32;
+    public static readonly MaximumSupportedBodyBytes = MaxUint32;
 
     /***
      * Creates a new instance of Blocks.
@@ -98,7 +100,9 @@ export class Blocks {
             this.storeReaderPosition = this.positionSkipper(this.storeReaderPosition);
         }
     }
-
+    /***
+     * @deprecated This method is still work in progress.
+     */
     public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: (block: Block) => Block = (b) => b): boolean {
         //TODO: We need to implement skipping mechanishm, as we may find blocks of different types which cannot be merged.
         //TODO: We need to include position of next block in purge callback so that the user urderstands where they are in the process.
@@ -116,10 +120,14 @@ export class Blocks {
             }
             else {
                 onlySingleBlock = false;
-                accumulator = currentBlock.merge(accumulator);
+                const multiAccumulator = currentBlock.merge(accumulator);
                 lastToPurgePosition = currentBlock.blockPosition - (currentBlock.headerLength + currentBlock.bodyLength);
-                if (shouldPurge(accumulator) === true) {
-                    this.purgeConsolidatedBlocks(accumulator, lastFromPurgePosition, lastToPurgePosition);
+                while (multiAccumulator.length > 1) {
+                    this.purgeConsolidatedBlocks(multiAccumulator.shift() as Block, lastFromPurgePosition, lastToPurgePosition);
+                }
+                accumulator = multiAccumulator.shift() as Block;
+                if (shouldPurge(accumulator) === true || multiAccumulator.length > 1) {
+                    this.purgeConsolidatedBlocks(multiAccumulator.shift() as Block, lastFromPurgePosition, lastToPurgePosition);
                 }
             }
             result = cursor.next();
