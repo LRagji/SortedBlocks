@@ -39,7 +39,8 @@ export class Blocks {
     }
 
     public * iterate(blockTypeFactory: (block: Block) => Block = (b) => b, readFrom: number = this.store.length - 1): Generator<[Block, number]> {
-        this.storeReaderPosition = this.positionSkipper(readFrom);
+        const maxAddress = this.store.length - 1;
+        this.storeReaderPosition = this.positionSkipper(Math.min(readFrom, maxAddress));//TODO:Why is there data corruption when i give address bigger than store size with File store.
         let accumulator = Buffer.alloc(0);
         const SOBLastByte = Blocks.SOB[Blocks.SOB.length - 1];
         while (this.storeReaderPosition > this.storeStartPosition) {
