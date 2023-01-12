@@ -23,7 +23,7 @@ describe(`Blocks consolidate specs`, () => {
         const payload = new TestBlock(Buffer.from("B1"), Buffer.from("H1"), mockStore);
         const bytesAppended = await target.append(payload);
         assert.strictEqual(mockStore.store.length, bytesAppended);
-        assert.strictEqual(target.consolidate(undefined, blockTypeFactory), false);
+        assert.strictEqual(await target.consolidate(undefined, blockTypeFactory), false);
     });
 
     it('should be able to consolidate 3 blocks into one with correct skip entry.', async () => {
@@ -41,7 +41,7 @@ describe(`Blocks consolidate specs`, () => {
         let cursor = target.iterate();
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             const remainingBytes = result.value[1];
@@ -58,20 +58,20 @@ describe(`Blocks consolidate specs`, () => {
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
             counter--;
         }
         assert.equal(payloads.length, 0);
         assert.equal(target.cacheContainer.length, 3);
 
-        assert.strictEqual(target.consolidate(undefined, blockTypeFactory), true);
+        assert.strictEqual(await target.consolidate(undefined, blockTypeFactory), true);
         assert.equal(target.cacheContainer.length, 0);
         assert.equal(bytesAppended < mockStore.store.length, true);
 
         previousRemainingBytes = mockStore.store.length;
         cursor = target.iterate();
         counter = 0;
-        result = cursor.next();
+        result = await cursor.next();
         const expectedHeader = Buffer.from("H3H2H1");
         const expectedBody = Buffer.from("B3B2B1");
         while (!result.done) {
@@ -89,7 +89,7 @@ describe(`Blocks consolidate specs`, () => {
             assert.equal(actual.type, 100);
             assert.equal(actual.store, mockStore);
             counter++;
-            result = cursor.next();
+            result = await cursor.next();
         }
         assert.equal(counter, 1);
     });

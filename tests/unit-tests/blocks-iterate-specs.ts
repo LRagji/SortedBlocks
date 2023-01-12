@@ -34,7 +34,7 @@ describe(`Blocks iterate specs`, () => {
         const cursor = target.iterate();
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             const remainingBytes = result.value[1];
@@ -52,7 +52,7 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.blockPosition, (bytesPerBlock * counter) - (preambleByteLength + 1));
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
             counter--;
         }
         assert.equal(payloads.length, 0);
@@ -72,7 +72,7 @@ describe(`Blocks iterate specs`, () => {
         const cursor = target.iterate();
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             const remainingBytes = result.value[1];
@@ -87,7 +87,7 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
             counter--;
         }
         assert.equal(payloads.length, 0);
@@ -97,11 +97,11 @@ describe(`Blocks iterate specs`, () => {
         const target = new Blocks(mockStore);
         const cursor = target.iterate();
         let counter = 0;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             assert.notEqual(actual, undefined);
-            result = cursor.next();
+            result = await cursor.next();
             counter++;
         }
         assert.equal(counter, 0);
@@ -124,7 +124,7 @@ describe(`Blocks iterate specs`, () => {
         const cursor = target.iterate();
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             const remainingBytes = result.value[1];
@@ -139,7 +139,7 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
             counter--;
         }
         assert.equal(payloads.length, 0);
@@ -160,11 +160,11 @@ describe(`Blocks iterate specs`, () => {
 
         let actualBlocks = new Map<number, Block>();
         const cursor = target.iterate();
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             actualBlocks.set(actual.blockPosition + preambleByteLength, actual);
-            result = cursor.next();
+            result = await cursor.next();
         }
         assert.equal(actualBlocks.size, target.cacheContainer.length);
         assert.deepStrictEqual(Array.from(actualBlocks.keys(), (v, _) => `${mockStore.id}-${v}`), Array.from((target.cacheContainer as LocalCache).cache.keys()));
@@ -186,11 +186,11 @@ describe(`Blocks iterate specs`, () => {
 
         let actualBlocks = new Map<number, Block>();
         const cursor = target.iterate();
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             actualBlocks.set(actual.blockPosition + preambleByteLength, actual);
-            result = cursor.next();
+            result = await cursor.next();
         }
         assert.equal(actualBlocks.size, payloads.length);
         assert.equal(target.cacheContainer.length, 0);
@@ -211,7 +211,7 @@ describe(`Blocks iterate specs`, () => {
         const cursor = target.iterate(blockTypeFactory);
         let previousRemainingBytes = bytesAppended;
         let counter = payloads.length;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             assert.equal(actual instanceof TestBlock, true);
@@ -228,7 +228,7 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
             counter--;
         }
         assert.equal(payloads.length, 0);
@@ -243,7 +243,7 @@ describe(`Blocks iterate specs`, () => {
 
         let cursor = target.iterate();
         let previousRemainingBytes = bytesAppended;
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             const remainingBytes = result.value[1];
@@ -260,7 +260,7 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
         }
         //assert.equal(payloads.length, 2);
         const b = payloads.shift();
@@ -273,7 +273,7 @@ describe(`Blocks iterate specs`, () => {
 
         cursor = target.iterate();
         previousRemainingBytes = bytesAppended;
-        result = cursor.next();
+        result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
             const remainingBytes = result.value[1];
@@ -290,7 +290,7 @@ describe(`Blocks iterate specs`, () => {
             assert.deepStrictEqual(actual.bodyLength, expected?.bodyLength);
             assert.deepStrictEqual(actual.headerLength, expected?.headerLength);
             assert.deepStrictEqual(actual.store?.id, expected?.store?.id);
-            result = cursor.next();
+            result = await cursor.next();
         }
 
         assert.equal(payloads.length, 0);

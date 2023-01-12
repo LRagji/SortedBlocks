@@ -38,11 +38,12 @@ export class Blocks {
         return this.systemBlockAppend(block);
     }
 
-    public * iterate(blockTypeFactory: (block: Block) => Block = (b) => b, readFrom: number = this.store.length - 1): Generator<[Block, number]> {
+    public async * iterate(blockTypeFactory: (block: Block) => Block = (b) => b, readFrom: number = this.store.length - 1): AsyncGenerator<[Block, number]> {
         const maxAddress = this.store.length - 1;
         this.storeReaderPosition = this.positionSkipper(Math.min(readFrom, maxAddress));//TODO:Why is there data corruption when i give address bigger than store size with File store.
         let accumulator = Buffer.alloc(0);
         const SOBLastByte = Blocks.SOB[Blocks.SOB.length - 1];
+        const cacheSetPromises = new Array<Promise<void>>;
         while (this.storeReaderPosition > this.storeStartPosition) {
             let reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
             if (reverserBuffer == null || reverserBuffer.length === 0) {
@@ -57,7 +58,14 @@ export class Blocks {
                     && Blocks.SOB.reduce((a, e, idx, arr) => a && e === accumulator[matchingIndex - ((arr.length - 1) - idx)], true)) {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
                     let isBlockFromCache = true;
-                    let block = this.cacheContainer.get(this.store.id, absoluteMatchingIndex);
+                    let block = null;
+                    try {
+                        block = await this.cacheContainer.get(this.store.id, absoluteMatchingIndex);
+                    }
+                    catch (err: any) {
+                        //Its ok to ignore as its cache, just log and move forward.
+                        console.error(err);
+                    }
                     if (block == null) {
                         //construct & invoke 
                         const preamble = this.store.measuredReverseRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
@@ -77,7 +85,7 @@ export class Blocks {
                         block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
                         if (block.type >= this.systemBlocks) block = blockTypeFactory(block);
                         if (this.cachePolicy != CachePolicy.None) {
-                            this.cacheContainer.set(this.store.id, absoluteMatchingIndex, block);
+                            cacheSetPromises.push(this.cacheContainer.set(this.store.id, absoluteMatchingIndex, block));//This returns a promise but we dont care and it can happen in background.
                         }
                         isBlockFromCache = false;
                     }
@@ -100,11 +108,21 @@ export class Blocks {
             this.storeReaderPosition -= reverserBuffer.length;
             this.storeReaderPosition = this.positionSkipper(this.storeReaderPosition);
         }
+        if (cacheSetPromises.length > 0) {
+            //We need to wait else this work may never be schedulled.
+            try {
+                await Promise.allSettled(cacheSetPromises);
+            }
+            catch (err: any) {
+                //Its ok to ignore as its cache, just log and move forward.
+                console.error(err);
+            }
+        }
     }
     /***
      * @deprecated This method is still work in progress.
      */
-    public consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: (block: Block) => Block = (b) => b): boolean {
+    public async consolidate(shouldPurge: (combinedBlock: Block) => boolean = (acc) => false, blockTypeFactory: (block: Block) => Block = (b) => b): Promise<boolean> {
         //TODO: We need to implement skipping mechanishm, as we may find blocks of different types which cannot be merged.
         //TODO: We need to include position of next block in purge callback so that the user urderstands where they are in the process.
         let accumulator: Block | null = null;
@@ -112,7 +130,7 @@ export class Blocks {
         let currentBlock: Block | null = null;
         let onlySingleBlock = true;
         const cursor = this.iterate(blockTypeFactory);
-        let result = cursor.next();
+        let result = await cursor.next();
         while (!result.done) {
             currentBlock = result.value[0];
             if (accumulator == null) {
@@ -131,7 +149,7 @@ export class Blocks {
                     this.purgeConsolidatedBlocks(multiAccumulator.shift() as Block, lastFromPurgePosition, lastToPurgePosition);
                 }
             }
-            result = cursor.next();
+            result = await cursor.next();
         }
         if (accumulator != null && onlySingleBlock === false) {
             this.purgeConsolidatedBlocks(accumulator, lastFromPurgePosition, lastToPurgePosition);

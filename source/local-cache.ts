@@ -9,13 +9,13 @@ export class LocalCache implements IBlocksCache {
         return this.cache.size;
     }
 
-    public set(stringKeyPart: string, absolutePosition: number, block: Block): void {
+    public async set(stringKeyPart: string, absolutePosition: number, block: Block): Promise<void> {
         this.cache.set(this.constructKey(stringKeyPart, absolutePosition), block);
     }
-    public get(stringKeyPart: string, absolutePosition: number): Block | undefined {
+    public async get(stringKeyPart: string, absolutePosition: number): Promise<Block | undefined> {
         return this.cache.get(this.constructKey(stringKeyPart, absolutePosition));
     }
-    public clear(stringKeyPart: string | undefined, before: number | undefined = undefined, after: number | undefined = undefined): void {
+    public async clear(stringKeyPart: string | undefined, before: number | undefined = undefined, after: number | undefined = undefined): Promise<void> {
         this.cache.clear();
     }
 
