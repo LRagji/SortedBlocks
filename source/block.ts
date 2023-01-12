@@ -20,20 +20,35 @@ export class Block {
             throw new Error(`Parameter "headerLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
         if (bodyLength == null || bodyLength < 0 || bodyLength > MaxUint32)
             throw new Error(`Parameter "bodyLength" cannot be null or undefined and has to be a in range of 0 to ${MaxUint32}.`);
-        const returnObject = new Block();
+        const returnObject = new Block(type, blockPosition);
         returnObject.store = store;
-        returnObject.type = type;
-        returnObject.blockPosition = blockPosition;
         returnObject.headerLength = headerLength;
         returnObject.bodyLength = bodyLength;
         return returnObject;
     }
 
+    constructor(type: number = 0, blockPosition: number = -1, private readonly headerBuff: Buffer | undefined = undefined, private readonly bodyBuff: Buffer | undefined = undefined) {
+        this.type = type;
+        this.blockPosition = blockPosition;
+        this.headerLength = headerBuff?.length || -1;
+        this.bodyLength = bodyBuff?.length || -1;
+    }
+
     public header(): Buffer {
-        return this.store?.measuredReverseRead(this.blockPosition, this.blockPosition - this.headerLength) || Buffer.alloc(0);
+        if (this.headerBuff != undefined) {
+            return this.headerBuff;
+        }
+        else {
+            return this.store?.measuredReverseRead(this.blockPosition, this.blockPosition - this.headerLength) || Buffer.alloc(0);
+        }
     }
     public body(): Buffer {
-        return this.store?.measuredReverseRead((this.blockPosition - this.headerLength), this.blockPosition - (this.headerLength + this.bodyLength)) || Buffer.alloc(0);
+        if (this.bodyBuff != undefined) {
+            return this.bodyBuff;
+        }
+        else {
+            return this.store?.measuredReverseRead((this.blockPosition - this.headerLength), this.blockPosition - (this.headerLength + this.bodyLength)) || Buffer.alloc(0);
+        }
     }
     public merge(other: Block): Block[] {
         throw new Error("Method not implemented.");
