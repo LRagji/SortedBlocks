@@ -66,7 +66,7 @@ export class Blocks {
                         //Its ok to ignore as its cache, just log and move forward.
                         console.error(err);
                     }
-                    if (block == null) {
+                    if (block == null || (block.store != null && block.store.id !== this.store.id)) {//It can be a cached block but with different store, not sure when will this happen defensive coding.
                         //construct & invoke 
                         const preamble = this.store.measuredReverseRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
                         if (preamble == null || preamble.length !== this.preambleLength) {
@@ -99,7 +99,10 @@ export class Blocks {
                         this.handleSystemBlock(block);
                     }
                     else {
-                        if (isBlockFromCache === true) block = blockTypeFactory(block);//This is the case when block was cached it was casted into some different type now its of different type.
+                        if (isBlockFromCache === true) {
+                            block.store = this.store; //Need to rehydrate the block with correct handles
+                            block = blockTypeFactory(block);//This is the case when block was cached it was casted into some different type now its of different type.
+                        }
                         yield ([block, Math.max(this.storeReaderPosition - this.storeStartPosition, this.storeStartPosition)]);
                     }
                 }
