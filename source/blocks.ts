@@ -17,7 +17,6 @@ export class Blocks {
 
     private storeReaderPosition: number = -1;
     private storeStartPosition: number = 0;
-    private readonly cachePolicy: CachePolicy;
     private readonly systemBlocks = 100;
     private readonly preambleLength = 18;
     public static readonly SOB = Buffer.from("2321", "hex");//#! 35 33
@@ -27,9 +26,8 @@ export class Blocks {
     /***
      * Creates a new instance of Blocks.
      */
-    constructor(store: IAppendStore, cachePolicy: CachePolicy = CachePolicy.Default, cacheContainer: IBlocksCache = new LocalCache()) {
+    constructor(store: IAppendStore, cacheContainer: IBlocksCache = new LocalCache()) {
         this.store = store;
-        this.cachePolicy = cachePolicy;
         this.cacheContainer = cacheContainer;
     }
 
@@ -38,12 +36,11 @@ export class Blocks {
         return this.systemBlockAppend(block);
     }
 
-    public async * iterate(blockTypeFactory: (block: Block) => Block = (b) => b, readFrom: number = this.store.length - 1): AsyncGenerator<[Block, number]> {
+    public async * iterate(blockTypeFactory: (block: Block) => Block = (b) => b, readFrom: number = this.store.length - 1, cachePolicy: CachePolicy = CachePolicy.Default): AsyncGenerator<[Block, number]> {
         const maxAddress = this.store.length - 1;
         this.storeReaderPosition = this.positionSkipper(Math.min(readFrom, maxAddress));//TODO:Why is there data corruption when i give address bigger than store size with File store.
         let accumulator = Buffer.alloc(0);
         const SOBLastByte = Blocks.SOB[Blocks.SOB.length - 1];
-        const cacheSetPromises = new Array<Promise<void>>;
         while (this.storeReaderPosition > this.storeStartPosition) {
             let reverserBuffer = this.store.reverseRead(this.storeReaderPosition);
             if (reverserBuffer == null || reverserBuffer.length === 0) {
@@ -59,14 +56,16 @@ export class Blocks {
                     const absoluteMatchingIndex = (this.storeReaderPosition - (reverserBuffer.length - 1)) + matchingIndex;
                     let isBlockFromCache = true;
                     let block = null;
-                    try {
-                        block = await this.cacheContainer.get(this.store.id, absoluteMatchingIndex);
+                    if (cachePolicy != CachePolicy.None) {
+                        try {
+                            block = await this.cacheContainer.get(this.store.id, absoluteMatchingIndex);
+                        }
+                        catch (err: any) {
+                            //Its ok to ignore as its cache, not a primary failure, just log and move forward.
+                            console.error(err);
+                        }
                     }
-                    catch (err: any) {
-                        //Its ok to ignore as its cache, just log and move forward.
-                        console.error(err);
-                    }
-                    if (block == null || (block.store != null && block.store.id !== this.store.id)) {//It can be a cached block but with different store, not sure when will this happen defensive coding.
+                    if (block == null) {
                         //construct & invoke 
                         const preamble = this.store.measuredReverseRead(absoluteMatchingIndex, Math.max(absoluteMatchingIndex - this.preambleLength, this.storeStartPosition));
                         if (preamble == null || preamble.length !== this.preambleLength) {
@@ -84,8 +83,8 @@ export class Blocks {
                         //Construct
                         block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
                         if (block.type >= this.systemBlocks) block = blockTypeFactory(block);
-                        if (this.cachePolicy != CachePolicy.None) {
-                            cacheSetPromises.push(this.cacheContainer.set(this.store.id, absoluteMatchingIndex, block));//This returns a promise but we dont care and it can happen in background.
+                        if (cachePolicy != CachePolicy.None) {
+                            await this.cacheContainer.set(this.store.id, absoluteMatchingIndex, block);//This returns a promise but we dont care and it can happen in background.
                         }
                         isBlockFromCache = false;
                     }
@@ -110,16 +109,6 @@ export class Blocks {
             while (matchingIndex > 0)
             this.storeReaderPosition -= reverserBuffer.length;
             this.storeReaderPosition = this.positionSkipper(this.storeReaderPosition);
-        }
-        if (cacheSetPromises.length > 0) {
-            //We need to wait else this work may never be schedulled.
-            try {
-                await Promise.allSettled(cacheSetPromises);
-            }
-            catch (err: any) {
-                //Its ok to ignore as its cache, just log and move forward.
-                console.error(err);
-            }
         }
     }
     /***

@@ -172,7 +172,7 @@ describe(`Blocks iterate specs`, () => {
     });
 
     it('should not cache already read blocks with none cache policy', async () => {
-        const target = new Blocks(mockStore, CachePolicy.None);
+        const target = new Blocks(mockStore);
         const body = Buffer.from("Body"), header = Buffer.from("Header");
         const payloads = [new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore), new TestBlock(body, header, mockStore)];
         const preambleByteLength = 18;
@@ -185,7 +185,7 @@ describe(`Blocks iterate specs`, () => {
         assert.strictEqual(mockStore.store.length, bytesAppended);
 
         let actualBlocks = new Map<number, Block>();
-        const cursor = target.iterate();
+        const cursor = target.iterate(undefined, undefined, CachePolicy.None);
         let result = await cursor.next();
         while (!result.done) {
             const actual = result.value[0];
