@@ -19,7 +19,7 @@ describe(`Blocks consolidate specs`, () => {
 
     it('should not consolidate if there is only single entry in the store', async () => {
         const target = new Blocks(mockStore);
-        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.headerLength, b.bodyLength) : b;
+        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.blockStartPosition, b.headerLength, b.bodyLength) : b;
         const payload = new TestBlock(Buffer.from("B1"), Buffer.from("H1"), mockStore);
         const bytesAppended = await target.append(payload);
         assert.strictEqual(mockStore.store.length, bytesAppended);
@@ -28,7 +28,7 @@ describe(`Blocks consolidate specs`, () => {
 
     it('should be able to consolidate 3 blocks into one with correct skip entry.', async () => {
         const target = new Blocks(mockStore);
-        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.headerLength, b.bodyLength) : b;
+        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.blockStartPosition, b.headerLength, b.bodyLength) : b;
         const payloads = [new TestBlock(Buffer.from("B1"), Buffer.from("H1"), mockStore), new TestBlock(Buffer.from("B2"), Buffer.from("H2"), mockStore), new TestBlock(Buffer.from("B3"), Buffer.from("H3"), mockStore)];
 
         let bytesAppended = 0;

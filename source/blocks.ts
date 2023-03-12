@@ -81,7 +81,7 @@ export class Blocks {
                         }
 
                         //Construct
-                        block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, blockHeaderLength, blockBodyLength);
+                        block = Block.from(this.store, blockType, absoluteMatchingIndex - this.preambleLength, absoluteMatchingIndex, blockHeaderLength, blockBodyLength);
                         if (block.type >= this.systemBlocks) block = blockTypeFactory(block);
                         if (cachePolicy != CachePolicy.None) {
                             await this.cacheContainer.set(this.store.id, absoluteMatchingIndex, block);//This returns a promise but we dont care and it can happen in background.
@@ -159,7 +159,7 @@ export class Blocks {
         //TODO: Skip blocks can have multiple entries.
         switch (systemBlock.type) {
             case SystemBlockTypes.Consolidated:
-                const castedBlock: SkipBlock = SkipBlock.from(systemBlock.store as IAppendStore, systemBlock.type, systemBlock.blockPosition, systemBlock.headerLength, systemBlock.bodyLength);
+                const castedBlock: SkipBlock = SkipBlock.from(systemBlock.store as IAppendStore, systemBlock.type, systemBlock.blockPosition, systemBlock.blockStartPosition, systemBlock.headerLength, systemBlock.bodyLength);
                 this.skipPositions.push({ fromPositionInclusive: Number(castedBlock.inclusivePositionFromSkip), toPositionInclusive: Number(castedBlock.inclusivePositionToSkip) });
                 //Sort the skip positions
                 this.skipPositions.sort((a, b) => b.toPositionInclusive - b.toPositionInclusive);

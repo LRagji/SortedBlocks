@@ -199,7 +199,7 @@ describe(`Blocks iterate specs`, () => {
     it('should be able to factory map for initializing the user defined block types.', async () => {
         const target = new Blocks(mockStore);
         const payloads = Array.from({ length: 200 }, (_, index) => new TestBlock(Buffer.from(`Body${index}`), Buffer.from(`Headersjjkakjdskjdk${index}`), mockStore));
-        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.headerLength, b.bodyLength) : b;
+        const blockTypeFactory = (b: Block) => b.type === TestBlock.type ? TestBlock.from(b.store as IAppendStore, b.type, b.blockPosition, b.blockStartPosition, b.headerLength, b.bodyLength) : b;
 
         let bytesAppended = 0;
         for (let index = 0; index < payloads.length; index++) {

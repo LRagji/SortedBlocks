@@ -30,8 +30,8 @@ export class SkipBlock extends Block {
         throw new Error(`System Block(${this.type}):${this.store?.id} cannot be merged with another Block(${other.type}):${other.store?.id}`);
     }
 
-    public static override from(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): SkipBlock {
-        const block = super.from(store, type, blockPosition, headerLength, bodyLength);
+    public static override from(store: IAppendStore, type: number, blockPosition: number, blockStartPosition: number, headerLength: number, bodyLength: number): SkipBlock {
+        const block = super.from(store, type, blockPosition, blockStartPosition, headerLength, bodyLength);
         const inclusivePositionFromSkip = block.header().readBigUint64BE(0);
         const inclusivePositionToSkip = block.header().readBigUint64BE(8);
         const returnObject = new SkipBlock(inclusivePositionFromSkip, inclusivePositionToSkip);

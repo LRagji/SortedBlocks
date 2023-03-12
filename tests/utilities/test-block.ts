@@ -5,7 +5,7 @@ export class TestBlock extends Block {
     public static type: number = 100;
 
     constructor(bodyBuff: Buffer, headerBuff: Buffer, public override store: IAppendStore) {
-        super(100, undefined, headerBuff, bodyBuff);
+        super(100, undefined, undefined, headerBuff, bodyBuff);
     }
 
     public override merge(other: Block): Block[] {
@@ -14,8 +14,8 @@ export class TestBlock extends Block {
         return [new TestBlock(body, header, this.store)];
     }
 
-    public static override from(store: IAppendStore, type: number, blockPosition: number, headerLength: number, bodyLength: number): TestBlock {
-        const b = super.from(store, type, blockPosition, headerLength, bodyLength);
+    public static override from(store: IAppendStore, type: number, blockPosition: number, blockStartPosittion: number, headerLength: number, bodyLength: number): TestBlock {
+        const b = super.from(store, type, blockPosition, blockStartPosittion, headerLength, bodyLength);
         const returnBlock = new TestBlock(b.body(), b.header(), store);
         returnBlock.blockPosition = blockPosition;
         return returnBlock;
